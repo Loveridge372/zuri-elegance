@@ -34,8 +34,8 @@ load_dotenv()
 app = Flask(__name__)
 
 APP_ENV = os.getenv("APP_ENV", "development")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://192.168.8.114:5173")
-BACKEND_URL = os.getenv("BACKEND_URL", "http://192.168.8.114:5000")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://ephemeral-dusk-efaed3.netlify.app")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://zuri-elegance-api.onrender.com")
 extra_cors_origins = [
     origin.strip()
     for origin in os.getenv("CORS_ORIGINS", "").split(",")
