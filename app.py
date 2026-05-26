@@ -49,7 +49,7 @@ CORS(
             "origins": [
                 "http://localhost:5173",
                 "http://127.0.0.1:5173",
-                "http://192.168.8.114:5173",
+                "https://ephemeral-dusk-efaed3.netlify.app",
                 FRONTEND_URL,
                 *extra_cors_origins,
             ]
