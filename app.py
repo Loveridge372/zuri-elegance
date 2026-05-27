@@ -4505,13 +4505,11 @@ def initialize_order_payment():
 
         db.session.commit()
 
-        callback_separator = "&" if "?" in PAYSTACK_CALLBACK_URL else "?"
-
         payload = {
             "email": email,
             "amount": int(round(total * 100)),
             "reference": reference,
-            "callback_url": f"{PAYSTACK_CALLBACK_URL}{callback_separator}reference={reference}",
+            "callback_url": f"{FRONTEND_URL}/?reference={reference}",
             "metadata": {
                 "user_id": user_id,
                 "order_id": order.id,

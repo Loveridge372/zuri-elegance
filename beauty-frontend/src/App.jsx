@@ -54,6 +54,11 @@ import FloatingAssistantChat from "./components/FloatingAssistantChat.jsx";
 
 export default function App() {
   const location = useLocation();
+  const rootParams = new URLSearchParams(location.search);
+  const rootPaymentReference =
+    rootParams.get("reference") ||
+    rootParams.get("ref") ||
+    rootParams.get("trxref");
 
   const hideFooter = [
     "/",
@@ -69,7 +74,16 @@ export default function App() {
       <Routes>
 
         {/* DEFAULT */}
-        <Route path="/" element={<Navigate to="/products" replace />} />
+        <Route
+          path="/"
+          element={
+            rootPaymentReference ? (
+              <PaymentSuccessPage />
+            ) : (
+              <Navigate to="/products" replace />
+            )
+          }
+        />
 
         {/* AUTH */}
         <Route path="/login" element={<LoginPage />} />
