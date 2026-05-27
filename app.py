@@ -35,12 +35,29 @@ load_dotenv()
 app = Flask(__name__)
 
 APP_ENV = os.getenv("APP_ENV", "development")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://ephemeral-dusk-efaed3.netlify.app")
-BACKEND_URL = os.getenv("BACKEND_URL", "https://zuri-elegance-api.onrender.com")
+
+
+def normalize_public_url(value, fallback):
+    url = (value or fallback or "").strip().rstrip("/")
+
+    if url and not url.startswith(("http://", "https://")):
+        url = f"https://{url}"
+
+    return url
+
+
+FRONTEND_URL = normalize_public_url(
+    os.getenv("FRONTEND_URL"),
+    "https://ephemeral-dusk-efaed3.netlify.app",
+)
+BACKEND_URL = normalize_public_url(
+    os.getenv("BACKEND_URL"),
+    "https://zuri-elegance-api.onrender.com",
+)
 extra_cors_origins = [
-    origin.strip()
+    normalize_public_url(origin, "")
     for origin in os.getenv("CORS_ORIGINS", "").split(",")
-    if origin.strip()
+    if normalize_public_url(origin, "")
 ]
 
 CORS(
@@ -190,9 +207,9 @@ def rewrite_uploaded_media_urls(response):
 
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")
 
-PAYSTACK_CALLBACK_URL = os.getenv(
-    "PAYSTACK_CALLBACK_URL",
-    f"{FRONTEND_URL}/payment-success"
+PAYSTACK_CALLBACK_URL = normalize_public_url(
+    os.getenv("PAYSTACK_CALLBACK_URL"),
+    f"{FRONTEND_URL}/payment-success",
 )
 
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
@@ -4380,15 +4397,6 @@ def admin_delete_brand(user_data, brand_name):
     return jsonify({"message": "Brand removed from products"}), 200
 
 
-@app.route("/paystack/initialize-order-payment", methods=["OPTIONS"])
-def initialize_order_payment_options():
-    response = jsonify({"ok": True})
-    response.headers.add("Access-Control-Allow-Origin", FRONTEND_URL)
-    response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
-    response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
-    return response, 200
-
-
 @app.route("/paystack/initialize-order-payment", methods=["POST"])
 def initialize_order_payment():
     """Create a pending order and initialize Paystack payment.
@@ -4497,11 +4505,13 @@ def initialize_order_payment():
 
         db.session.commit()
 
+        callback_separator = "&" if "?" in PAYSTACK_CALLBACK_URL else "?"
+
         payload = {
             "email": email,
             "amount": int(round(total * 100)),
             "reference": reference,
-            "callback_url": f"{FRONTEND_URL}/payment-success?reference={reference}",
+            "callback_url": f"{PAYSTACK_CALLBACK_URL}{callback_separator}reference={reference}",
             "metadata": {
                 "user_id": user_id,
                 "order_id": order.id,
