@@ -254,6 +254,10 @@ const subtotalExVat = subtotal;
           "zuri_pending_payment_reference",
           payData.reference
         );
+        sessionStorage.setItem(
+          "zuri_pending_payment_reference",
+          payData.reference
+        );
       }
 
       window.location.href =

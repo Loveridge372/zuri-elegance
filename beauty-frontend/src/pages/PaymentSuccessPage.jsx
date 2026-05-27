@@ -16,6 +16,22 @@ const WINE = "#50242A";
 const GOLD = "#A38560";
 const EMERALD = "#07332c";
 
+function getStoredPaymentReference() {
+  return (
+    localStorage.getItem("zuri_pending_payment_reference") ||
+    sessionStorage.getItem("zuri_pending_payment_reference")
+  );
+}
+
+function getStoredUserId() {
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "null");
+    return user?.id || null;
+  } catch {
+    return null;
+  }
+}
+
 export default function PaymentSuccessPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -23,21 +39,56 @@ export default function PaymentSuccessPage() {
     searchParams.get("reference") ||
     searchParams.get("ref") ||
     searchParams.get("trxref") ||
-    localStorage.getItem("zuri_pending_payment_reference");
+    getStoredPaymentReference();
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const findLatestOrder = async () => {
+      const userId = getStoredUserId();
+
+      if (!userId) {
+        return null;
+      }
+
+      const res = await fetch(`${API_BASE}/orders/${userId}`);
+      const orders = await res.json();
+
+      if (!res.ok || !Array.isArray(orders)) {
+        return null;
+      }
+
+      return (
+        orders.find((item) => item.reference && item.status === "Paid") ||
+        orders.find((item) => item.reference && item.status === "Pending Payment") ||
+        orders.find((item) => item.reference) ||
+        null
+      );
+    };
+
     const verifyPayment = async () => {
-      if (!reference) {
+      const latestOrder = reference ? null : await findLatestOrder();
+
+      if (latestOrder?.status === "Paid") {
+        localStorage.removeItem("zuri_cart");
+        localStorage.removeItem("zuri_pending_payment_reference");
+        sessionStorage.removeItem("zuri_pending_payment_reference");
+        setOrder(latestOrder);
+        setLoading(false);
+        return;
+      }
+
+      const paymentReference = reference || latestOrder?.reference || "";
+
+      if (!paymentReference) {
         setError("Missing payment reference.");
         setLoading(false);
         return;
       }
 
       try {
-        const res = await fetch(`${API_BASE}/paystack/verify-order-payment?reference=${reference}`);
+        const res = await fetch(`${API_BASE}/paystack/verify-order-payment?reference=${paymentReference}`);
         const data = await res.json();
 
         if (!res.ok) {
@@ -47,6 +98,7 @@ export default function PaymentSuccessPage() {
 
         localStorage.removeItem("zuri_cart");
         localStorage.removeItem("zuri_pending_payment_reference");
+        sessionStorage.removeItem("zuri_pending_payment_reference");
         setOrder(data.order || null);
       } catch (err) {
         console.error("PAYMENT VERIFY ERROR:", err);

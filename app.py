@@ -4585,7 +4585,7 @@ def paystack_payment_callback():
             print("PAYSTACK CALLBACK VERIFY ERROR:", e)
 
     query = urlencode({"reference": reference}) if reference else ""
-    frontend_success_url = f"{FRONTEND_URL}/"
+    frontend_success_url = f"{FRONTEND_URL}/payment-success"
 
     if query:
         frontend_success_url = f"{frontend_success_url}?{query}"
