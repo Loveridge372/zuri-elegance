@@ -9,7 +9,7 @@ import base64
 import json
 import random
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from openai import OpenAI
 from io import BytesIO
@@ -24,7 +24,7 @@ from functools import wraps
 from twilio.rest import Client
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from flask import Flask, Response, request, jsonify, send_from_directory
+from flask import Flask, Response, redirect, request, jsonify, send_from_directory
 from flask_cors import CORS, cross_origin
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
@@ -4509,7 +4509,7 @@ def initialize_order_payment():
             "email": email,
             "amount": int(round(total * 100)),
             "reference": reference,
-            "callback_url": f"{FRONTEND_URL}/?reference={reference}",
+            "callback_url": f"{BACKEND_URL}/paystack/payment-callback?reference={reference}",
             "metadata": {
                 "user_id": user_id,
                 "order_id": order.id,
@@ -4552,6 +4552,24 @@ def initialize_order_payment():
         db.session.rollback()
         print("PAYSTACK INITIALIZE ERROR:", e)
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/paystack/payment-callback", methods=["GET"])
+def paystack_payment_callback():
+    reference = (
+        request.args.get("reference")
+        or request.args.get("trxref")
+        or request.args.get("ref")
+        or ""
+    ).strip()
+
+    query = urlencode({"reference": reference}) if reference else ""
+    redirect_url = f"{FRONTEND_URL}/"
+
+    if query:
+        redirect_url = f"{redirect_url}?{query}"
+
+    return redirect(redirect_url, code=302)
 
 
 @app.route("/paystack/verify-order-payment", methods=["GET"])
