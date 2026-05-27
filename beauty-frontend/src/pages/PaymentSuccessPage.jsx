@@ -19,7 +19,10 @@ const EMERALD = "#07332c";
 export default function PaymentSuccessPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const reference = searchParams.get("reference");
+  const reference =
+    searchParams.get("reference") ||
+    searchParams.get("ref") ||
+    searchParams.get("trxref");
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState(null);
   const [error, setError] = useState("");
