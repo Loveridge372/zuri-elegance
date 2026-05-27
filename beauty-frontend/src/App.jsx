@@ -54,6 +54,7 @@ import FloatingAssistantChat from "./components/FloatingAssistantChat.jsx";
 
 export default function App() {
   const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith("/admin");
   const rootParams = new URLSearchParams(location.search);
   const rootPaymentReference =
     rootParams.get("reference") ||
@@ -289,7 +290,7 @@ export default function App() {
 
       {!hideFooter && <LuxeFooter />}
 
-      <FloatingAssistantChat />
+      {!isAdminRoute && <FloatingAssistantChat />}
     </>
   );
 }

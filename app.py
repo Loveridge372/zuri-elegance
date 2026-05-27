@@ -4,6 +4,7 @@ import uuid
 import requests
 import jwt
 import hmac
+import html
 import hashlib
 import base64
 import json
@@ -4563,13 +4564,107 @@ def paystack_payment_callback():
         or ""
     ).strip()
 
+    payment_status = "received"
+
+    if reference and PAYSTACK_SECRET_KEY:
+        try:
+            verify_response = requests.get(
+                f"https://api.paystack.co/transaction/verify/{reference}",
+                headers={
+                    "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}",
+                    "Content-Type": "application/json",
+                },
+                timeout=20,
+            )
+            verify_result = verify_response.json()
+            payment_status = (
+                verify_result.get("data", {}).get("status")
+                or payment_status
+            )
+        except Exception as e:
+            print("PAYSTACK CALLBACK VERIFY ERROR:", e)
+
     query = urlencode({"reference": reference}) if reference else ""
-    redirect_url = f"{FRONTEND_URL}/"
+    frontend_success_url = f"{FRONTEND_URL}/"
 
     if query:
-        redirect_url = f"{redirect_url}?{query}"
+        frontend_success_url = f"{frontend_success_url}?{query}"
 
-    return redirect(redirect_url, code=302)
+    escaped_reference = html.escape(reference or "Unavailable")
+    escaped_status = html.escape(payment_status.title())
+    escaped_frontend_url = html.escape(frontend_success_url, quote=True)
+
+    return Response(
+        f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Payment Received | Zuri Elegance</title>
+    <style>
+      body {{
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        box-sizing: border-box;
+        font-family: Arial, sans-serif;
+        color: #2b2023;
+        background: linear-gradient(135deg, #fbf7f1, #efe3d6);
+      }}
+      main {{
+        width: min(520px, 100%);
+        border-radius: 24px;
+        padding: 28px;
+        background: #fff;
+        box-shadow: 0 22px 55px rgba(80,36,42,.18);
+        border: 1px solid rgba(80,36,42,.10);
+        text-align: center;
+      }}
+      h1 {{
+        margin: 0 0 10px;
+        color: #50242A;
+        font-family: Georgia, serif;
+        font-size: 32px;
+      }}
+      p {{
+        margin: 8px 0;
+        line-height: 1.55;
+        font-weight: 700;
+      }}
+      .ref {{
+        margin: 18px 0;
+        padding: 14px;
+        border-radius: 14px;
+        background: #f8f4ee;
+        color: #50242A;
+        word-break: break-word;
+      }}
+      a {{
+        display: inline-flex;
+        margin-top: 14px;
+        padding: 13px 18px;
+        border-radius: 14px;
+        background: #50242A;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 900;
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Payment {escaped_status}</h1>
+      <p>Thank you. Your Zuri Elegance payment has been received and your order is being processed.</p>
+      <div class="ref">Reference: {escaped_reference}</div>
+      <p>An order confirmation email has been sent if payment was successful.</p>
+      <a href="{escaped_frontend_url}">Continue to Zuri Elegance</a>
+    </main>
+  </body>
+</html>""",
+        mimetype="text/html",
+    )
 
 
 @app.route("/paystack/verify-order-payment", methods=["GET"])

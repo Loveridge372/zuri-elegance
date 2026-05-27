@@ -127,8 +127,9 @@ const css = `
   position: fixed;
   inset: 18px auto 18px 18px;
   width: 280px;
+  max-height: calc(100dvh - 36px);
   border-radius: 30px;
-  padding: 22px;
+  padding: 22px 22px calc(22px + env(safe-area-inset-bottom));
   background:
     radial-gradient(circle at top left, rgba(163,133,96,.24), transparent 34%),
     linear-gradient(180deg, ${EMERALD}, ${WINE}, #1f0f12);
@@ -137,6 +138,9 @@ const css = `
   box-shadow: 0 24px 70px rgba(80,36,42,.30);
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .admin-brand {
@@ -276,6 +280,9 @@ const css = `
 
 @media (max-width: 900px) {
   .admin-sidebar {
+    inset: 10px auto 10px 10px;
+    width: min(320px, calc(100vw - 24px));
+    max-height: calc(100dvh - 20px);
     transform: translateX(-120%);
     transition: .25s ease;
   }

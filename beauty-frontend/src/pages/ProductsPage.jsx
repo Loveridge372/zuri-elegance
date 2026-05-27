@@ -995,7 +995,7 @@ function ProductCard({
         </button>
       </div>
 
-      <div style={styles.cardBody}>
+      <div style={styles.cardBody} className="product-card-body">
         <p style={styles.categoryText}>
           {product.brand || product.category || "Hair"}
         </p>
@@ -1034,7 +1034,7 @@ function ProductCard({
   </span>
 </div>
 
-        <div style={styles.cardBottom}>
+        <div style={styles.cardBottom} className="product-card-bottom">
           <div>
             {discount > 0 && (
               <span style={styles.oldPrice}>R {originalPrice.toFixed(2)}</span>
@@ -2366,12 +2366,22 @@ const css = `
   grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));
   gap: 18px;
   align-items: stretch;
+  grid-auto-rows: 1fr;
 }
 
 .product-grid .product-card {
   min-width: 0 !important;
   max-width: none !important;
   width: 100%;
+  height: 100%;
+}
+
+.product-card-body {
+  min-height: 0;
+}
+
+.product-card-bottom {
+  min-height: 50px;
 }
 
 .product-label-stack {
@@ -2588,6 +2598,15 @@ const css = `
     overflow: visible !important;
     padding-bottom: 18px !important;
     width: 100% !important;
+    align-items: stretch !important;
+    grid-auto-rows: 1fr !important;
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+    align-items: stretch !important;
+    grid-auto-rows: 1fr !important;
   }
 
   .product-card {
@@ -2597,14 +2616,21 @@ const css = `
     border-radius: 17px !important;
     overflow: hidden !important;
     box-sizing: border-box !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
   }
 
   .product-card > div:first-child {
     height: 145px !important;
   }
 
+  .product-card-body,
   .product-card > div:last-child {
     padding: 10px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
   }
 
   .product-card h3 {
@@ -2618,13 +2644,41 @@ const css = `
     line-height: 1.3 !important;
   }
 
-  .product-card > div:last-child > p:nth-of-type(2) {
-    min-height: 30px !important;
-    max-height: 30px !important;
+  .product-card > div:last-child > p:nth-of-type(2),
+  .product-card .product-card-body > p:nth-of-type(2) {
+    min-height: 43px !important;
+    max-height: 43px !important;
     overflow: hidden !important;
     margin: 5px 0 8px !important;
   }
 
+  .product-ai-match {
+    min-height: 56px !important;
+    padding: 8px !important;
+    gap: 8px !important;
+  }
+
+  .product-ai-match strong {
+    font-size: 11px !important;
+    line-height: 1.15 !important;
+  }
+
+  .product-match-ring {
+    width: 38px !important;
+    height: 38px !important;
+  }
+
+  .product-match-ring span {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  .product-card .product-card-bottom,
+  .product-card > div:last-child > div:last-child {
+    margin-top: auto !important;
+  }
+
+  .product-card-bottom,
   .product-card > div:last-child > div:last-child {
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;

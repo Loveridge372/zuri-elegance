@@ -387,16 +387,32 @@ const css = `
 @media (max-width: 620px) {
   .floating-assistant {
     right: 14px;
-    bottom: 14px;
+    bottom: calc(82px + env(safe-area-inset-bottom));
   }
 
   .floating-assistant-toggle {
-    width: 56px;
-    height: 56px;
+    width: 52px;
+    height: 52px;
   }
 
   .floating-assistant-panel {
-    height: min(560px, calc(100vh - 94px));
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    width: auto;
+    height: min(520px, calc(100dvh - 150px));
+    border-radius: 22px;
+  }
+
+  .floating-chat-message > div {
+    max-width: 92%;
+    font-size: 13px;
+  }
+
+  .floating-composer {
+    grid-template-columns: 1fr 48px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
 }
 `;

@@ -106,9 +106,13 @@ const styles = {
     top: 0,
     left: 0,
     width: "280px",
-    height: "100vh",
-    padding: "24px",
+    maxWidth: "calc(100vw - 28px)",
+    height: "100dvh",
+    padding: "24px 24px calc(34px + env(safe-area-inset-bottom))",
     zIndex: 1000,
+    boxSizing: "border-box",
+    overflowY: "auto",
+    overscrollBehavior: "contain",
 
     /* GLASS EFFECT */
     background: "rgba(255,255,255,0.08)",
