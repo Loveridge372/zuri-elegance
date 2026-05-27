@@ -1,4 +1,4 @@
-
+import API_BASE from "../services/api";
 import { useEffect, useRef, useState } from "react";
 import {
   FaCrown,
@@ -16,7 +16,6 @@ import { useCart } from "../context/CartContext";
 
 const WINE = "#50242A";
 const GOLD = "#A38560";
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export default function RecommendedProducts() {
   const navigate = useNavigate();

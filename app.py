@@ -9,6 +9,7 @@ import base64
 import json
 import random
 import re
+from urllib.parse import urlparse
 
 from openai import OpenAI
 from io import BytesIO
@@ -113,6 +114,51 @@ def save_product_image(file):
     file.save(file_path)
 
     return f"{BACKEND_URL}/static/uploads/{unique_name}"
+
+
+def normalize_uploaded_media_url(value):
+    if not isinstance(value, str) or "/static/uploads/" not in value:
+        return value
+
+    parsed = urlparse(value)
+    upload_path = parsed.path if parsed.scheme and parsed.netloc else value
+
+    if "/static/uploads/" not in upload_path:
+        return value
+
+    upload_path = upload_path[upload_path.index("/static/uploads/"):]
+    return f"{BACKEND_URL.rstrip('/')}{upload_path}"
+
+
+def normalize_response_media_urls(value):
+    if isinstance(value, dict):
+        return {
+            key: normalize_response_media_urls(item)
+            for key, item in value.items()
+        }
+
+    if isinstance(value, list):
+        return [normalize_response_media_urls(item) for item in value]
+
+    return normalize_uploaded_media_url(value)
+
+
+@app.after_request
+def rewrite_uploaded_media_urls(response):
+    if not response.is_json:
+        return response
+
+    try:
+        payload = response.get_json(silent=True)
+        if payload is None:
+            return response
+
+        response.set_data(json.dumps(normalize_response_media_urls(payload)))
+        response.headers["Content-Type"] = "application/json"
+    except Exception as e:
+        print("MEDIA URL NORMALIZE ERROR:", e)
+
+    return response
     
 
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")

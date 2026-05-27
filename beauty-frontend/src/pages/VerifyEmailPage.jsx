@@ -1,7 +1,7 @@
+import API_BASE from "../services/api";
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export default function VerifyEmailPage() {
   const navigate = useNavigate();

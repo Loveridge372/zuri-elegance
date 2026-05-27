@@ -1,3 +1,4 @@
+import API_BASE from "../services/api";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -10,7 +11,6 @@ import {
 import { FaCartShopping, FaShieldHalved } from "react-icons/fa6";
 import Navbar from "../components/Navbar";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const WINE = "#50242A";
 const GOLD = "#A38560";
 

@@ -1,4 +1,4 @@
-
+import API_BASE from "../services/api";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -23,7 +23,6 @@ const GOLD = "#A38560";
 const EMERALD = "#07332c";
 const VAT_RATE = 0.15;
 const DELIVERY_FEE = 100;
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export default function CartPage() {
   const navigate = useNavigate();

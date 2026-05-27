@@ -1,10 +1,9 @@
-
+import API_BASE from "../services/api";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import HeroSlider from "../components/HeroSlider";
 import { FaUserPlus, FaTruckFast, FaShieldHalved, FaWhatsapp } from "react-icons/fa6";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export default function RegisterPage() {
   const navigate = useNavigate();

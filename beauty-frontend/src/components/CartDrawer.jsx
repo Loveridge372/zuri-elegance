@@ -1,6 +1,6 @@
+import API_BASE from "../services/api";
 import { FaMinus, FaPlus, FaTrash, FaXmark } from "react-icons/fa6";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:5000";
 const WINE = "#50242A";
 const GOLD = "#A38560";
 

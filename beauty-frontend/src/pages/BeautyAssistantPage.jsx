@@ -1,3 +1,4 @@
+import API_BASE from "../services/api";
 import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -9,7 +10,6 @@ import {
 } from "react-icons/fa";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
-import API_BASE from "../services/api";
 
 const WINE = "#50242A";
 const GOLD = "#A38560";

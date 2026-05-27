@@ -1,7 +1,7 @@
+import API_BASE from "../services/api";
 import { useEffect, useState } from "react";
 import { FaBell } from "react-icons/fa";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const WINE = "#50242A";
 const GOLD = "#A38560";
 

@@ -1,6 +1,6 @@
+import API_BASE from "../services/api";
 import { useMemo, useRef, useState } from "react";
 import { FaComments, FaPaperPlane, FaTimes } from "react-icons/fa";
-import API_BASE from "../services/api";
 
 const WINE = "#50242A";
 const GOLD = "#A38560";

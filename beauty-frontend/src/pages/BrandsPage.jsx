@@ -1,10 +1,10 @@
+import API_BASE from "../services/api";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaArrowRight, FaBars, FaCrown, FaTags } from "react-icons/fa6";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Seo from "../components/Seo";
-import API_BASE from "../services/api";
 
 const WINE = "#50242A";
 const GOLD = "#A38560";

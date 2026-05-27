@@ -1,3 +1,4 @@
+import API_BASE from "../services/api";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -19,7 +20,6 @@ import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Seo from "../components/Seo";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export default function ProfilePage() {
   const navigate = useNavigate();

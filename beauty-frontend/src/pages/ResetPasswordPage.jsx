@@ -1,8 +1,8 @@
+import API_BASE from "../services/api";
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { FaEye, FaEyeSlash, FaLock } from "react-icons/fa";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export default function ResetPasswordPage() {
   const navigate = useNavigate();

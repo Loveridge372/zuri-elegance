@@ -1,8 +1,8 @@
+import API_BASE from "../services/api";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 export const CartContext = createContext(null);
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 function getUserId() {
   try {

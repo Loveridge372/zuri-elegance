@@ -1,8 +1,8 @@
+import API_BASE from "../services/api";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaLock, FaEnvelope, FaTruck, FaEye, FaEyeSlash } from "react-icons/fa";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export default function LoginPage() {
   const navigate = useNavigate();

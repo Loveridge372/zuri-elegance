@@ -1,10 +1,10 @@
+import API_BASE from "../services/api";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaArrowLeft, FaClockRotateLeft, FaWandMagicSparkles } from "react-icons/fa6";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const WINE = "#50242A";
 const GOLD = "#A38560";
 
