@@ -9,4 +9,3 @@ instance/
 *.db
 *.sqlite
 *.sqlite3
-static/uploads/

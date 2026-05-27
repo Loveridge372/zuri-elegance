@@ -24,7 +24,7 @@ from functools import wraps
 from twilio.rest import Client
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify
+from flask import Flask, Response, request, jsonify, send_from_directory
 from flask_cors import CORS, cross_origin
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
@@ -89,6 +89,33 @@ UPLOAD_FOLDER = "static/uploads"
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 MAX_PRODUCT_IMAGE_BYTES = 8 * 1024 * 1024
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+MISSING_PRODUCT_IMAGE_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" viewBox="0 0 900 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff8f0"/>
+      <stop offset="1" stop-color="#50242a"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="900" fill="url(#bg)"/>
+  <circle cx="450" cy="350" r="150" fill="rgba(255,255,255,.28)"/>
+  <text x="450" y="510" text-anchor="middle" font-family="Georgia,serif" font-size="58" font-weight="700" fill="#fff8f0">Zuri Elegance</text>
+  <text x="450" y="570" text-anchor="middle" font-family="Arial,sans-serif" font-size="24" letter-spacing="4" fill="#f3d8aa">PRODUCT IMAGE</text>
+</svg>"""
+
+
+@app.route("/static/uploads/<path:filename>")
+def uploaded_product_image(filename):
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
+
+    if os.path.isfile(file_path):
+        return send_from_directory(UPLOAD_FOLDER, filename)
+
+    return Response(
+        MISSING_PRODUCT_IMAGE_SVG,
+        mimetype="image/svg+xml",
+        headers={"Cache-Control": "no-store"},
+    )
 
 def is_allowed_image(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
