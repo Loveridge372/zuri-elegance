@@ -1,7 +1,6 @@
 [build]
-  base = "beauty-frontend"
-  command = "npm run build"
-  publish = "dist"
+  command = "cd beauty-frontend && npm run build"
+  publish = "beauty-frontend/dist"
 
 [[redirects]]
   from = "/*"
