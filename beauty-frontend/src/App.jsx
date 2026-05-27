@@ -58,7 +58,8 @@ export default function App() {
   const rootPaymentReference =
     rootParams.get("reference") ||
     rootParams.get("ref") ||
-    rootParams.get("trxref");
+    rootParams.get("trxref") ||
+    localStorage.getItem("zuri_pending_payment_reference");
 
   const hideFooter = [
     "/",

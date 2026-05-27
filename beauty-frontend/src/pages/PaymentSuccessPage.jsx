@@ -22,7 +22,8 @@ export default function PaymentSuccessPage() {
   const reference =
     searchParams.get("reference") ||
     searchParams.get("ref") ||
-    searchParams.get("trxref");
+    searchParams.get("trxref") ||
+    localStorage.getItem("zuri_pending_payment_reference");
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState(null);
   const [error, setError] = useState("");
@@ -45,6 +46,7 @@ export default function PaymentSuccessPage() {
         }
 
         localStorage.removeItem("zuri_cart");
+        localStorage.removeItem("zuri_pending_payment_reference");
         setOrder(data.order || null);
       } catch (err) {
         console.error("PAYMENT VERIFY ERROR:", err);

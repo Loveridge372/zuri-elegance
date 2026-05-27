@@ -249,6 +249,13 @@ const subtotalExVat = subtotal;
         "zuri_coupon"
       );
 
+      if (payData.reference) {
+        localStorage.setItem(
+          "zuri_pending_payment_reference",
+          payData.reference
+        );
+      }
+
       window.location.href =
         payData.authorization_url;
     } catch (err) {
