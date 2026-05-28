@@ -47,6 +47,19 @@ def normalize_public_url(value, fallback):
     return url
 
 
+def get_payment_return_frontend_url():
+    url = normalize_public_url(
+        os.getenv("PAYMENT_RETURN_FRONTEND_URL"),
+        FRONTEND_URL,
+    )
+    host = urlparse(url).netloc.lower()
+
+    if host in {"zuri-elegance.netlify.app", "elegance.netlify.app"}:
+        return "https://ephemeral-dusk-efaed3.netlify.app"
+
+    return url
+
+
 FRONTEND_URL = normalize_public_url(
     os.getenv("FRONTEND_URL"),
     "https://ephemeral-dusk-efaed3.netlify.app",
@@ -4585,7 +4598,8 @@ def paystack_payment_callback():
             print("PAYSTACK CALLBACK VERIFY ERROR:", e)
 
     query = urlencode({"reference": reference}) if reference else ""
-    frontend_success_url = f"{FRONTEND_URL}/payment-success"
+    payment_frontend_url = get_payment_return_frontend_url()
+    frontend_success_url = f"{payment_frontend_url}/payment-success"
 
     if query:
         frontend_success_url = f"{frontend_success_url}?{query}"
@@ -4602,64 +4616,162 @@ def paystack_payment_callback():
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Payment Received | Zuri Elegance</title>
     <style>
+      :root {{
+        color-scheme: light;
+      }}
       body {{
         margin: 0;
         min-height: 100vh;
         display: grid;
         place-items: center;
-        padding: 24px;
+        padding: 28px;
         box-sizing: border-box;
-        font-family: Arial, sans-serif;
+        font-family: Inter, Arial, sans-serif;
         color: #2b2023;
-        background: linear-gradient(135deg, #fbf7f1, #efe3d6);
+        background:
+          radial-gradient(circle at 18% 8%, rgba(163,133,96,.22), transparent 30%),
+          radial-gradient(circle at 86% 12%, rgba(7,51,44,.16), transparent 28%),
+          linear-gradient(180deg, #fbf7f1, #f3ece3);
       }}
       main {{
-        width: min(520px, 100%);
-        border-radius: 24px;
-        padding: 28px;
-        background: #fff;
-        box-shadow: 0 22px 55px rgba(80,36,42,.18);
+        width: min(620px, 100%);
+        border-radius: 30px;
+        padding: 34px;
+        background: rgba(255,255,255,.96);
+        box-shadow: 0 26px 80px rgba(80,36,42,.18);
         border: 1px solid rgba(80,36,42,.10);
         text-align: center;
+        box-sizing: border-box;
+        position: relative;
+        overflow: hidden;
+      }}
+      main::before {{
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(90deg, rgba(80,36,42,.07), transparent 38%),
+          radial-gradient(circle at top right, rgba(163,133,96,.18), transparent 36%);
+        pointer-events: none;
+      }}
+      .content {{
+        position: relative;
+        z-index: 1;
+      }}
+      .mark {{
+        width: 74px;
+        height: 74px;
+        margin: 0 auto 18px;
+        border-radius: 24px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, #A38560, #f7e7ce);
+        color: #2b1114;
+        box-shadow: 0 18px 34px rgba(163,133,96,.28);
+      }}
+      .mark svg {{
+        width: 34px;
+        height: 34px;
+      }}
+      .kicker {{
+        margin: 0;
+        color: #A38560;
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 2.2px;
       }}
       h1 {{
-        margin: 0 0 10px;
+        margin: 10px 0 12px;
         color: #50242A;
         font-family: Georgia, serif;
-        font-size: 32px;
+        font-size: clamp(42px, 8vw, 64px);
+        line-height: .96;
       }}
       p {{
-        margin: 8px 0;
-        line-height: 1.55;
-        font-weight: 700;
+        margin: 10px auto;
+        max-width: 500px;
+        line-height: 1.62;
+        font-weight: 800;
+        color: #4c4144;
       }}
       .ref {{
-        margin: 18px 0;
-        padding: 14px;
-        border-radius: 14px;
+        margin: 22px 0;
+        padding: 15px 16px;
+        border-radius: 18px;
         background: #f8f4ee;
         color: #50242A;
         word-break: break-word;
+        border: 1px solid rgba(80,36,42,.06);
+        font-weight: 900;
+      }}
+      .ref span {{
+        display: block;
+        margin-bottom: 5px;
+        color: #75686a;
+        font-size: 10px;
+        letter-spacing: 1.4px;
+        text-transform: uppercase;
       }}
       a {{
         display: inline-flex;
-        margin-top: 14px;
-        padding: 13px 18px;
-        border-radius: 14px;
+        align-items: center;
+        justify-content: center;
+        min-height: 52px;
+        margin-top: 16px;
+        padding: 0 22px;
+        border-radius: 16px;
         background: #50242A;
         color: #fff;
         text-decoration: none;
         font-weight: 900;
+        box-shadow: 0 14px 30px rgba(80,36,42,.18);
+      }}
+      .hint {{
+        color: #786c6f;
+        font-size: 13px;
+      }}
+      @media (max-width: 560px) {{
+        body {{
+          padding: 16px;
+          place-items: center;
+        }}
+        main {{
+          padding: 28px 18px;
+          border-radius: 26px;
+        }}
+        .mark {{
+          width: 62px;
+          height: 62px;
+          border-radius: 21px;
+        }}
+        h1 {{
+          font-size: 42px;
+        }}
+        p {{
+          font-size: 15px;
+        }}
+        a {{
+          width: 100%;
+          box-sizing: border-box;
+        }}
       }}
     </style>
   </head>
   <body>
     <main>
-      <h1>Payment {escaped_status}</h1>
-      <p>Thank you. Your Zuri Elegance payment has been received and your order is being processed.</p>
-      <div class="ref">Reference: {escaped_reference}</div>
-      <p>An order confirmation email has been sent if payment was successful.</p>
-      <a href="{escaped_frontend_url}">Continue to Zuri Elegance</a>
+      <div class="content">
+        <div class="mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="kicker">ZURI ELEGANCE CHECKOUT</p>
+        <h1>Payment {escaped_status}</h1>
+        <p>Thank you. Your payment has been received and your order is now being prepared.</p>
+        <div class="ref"><span>Payment Reference</span>{escaped_reference}</div>
+        <p class="hint">A confirmation email has been sent if the payment was successful.</p>
+        <a href="{escaped_frontend_url}">View Order Confirmation</a>
+      </div>
     </main>
   </body>
 </html>""",
