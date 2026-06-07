@@ -50,6 +50,7 @@ import AdminRewardsPage from "./pages/admin/AdminRewardsPage.jsx";
 import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
 
 import LuxeFooter from "./components/LuxeFooter.jsx";
+import AppDownloadBand from "./components/AppDownloadBand.jsx";
 import FloatingAssistantChat from "./components/FloatingAssistantChat.jsx";
 
 export default function App() {
@@ -288,6 +289,7 @@ export default function App() {
 
       </Routes>
 
+      {!hideFooter && <AppDownloadBand />}
       {!hideFooter && <LuxeFooter />}
 
       {!isAdminRoute && <FloatingAssistantChat />}
