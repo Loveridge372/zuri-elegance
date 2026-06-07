@@ -236,6 +236,18 @@ USE_REAL_AI = (
     .lower() == "true"
 )
 
+def parse_positive_int_env(name, default):
+    try:
+        return max(0, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
+AI_ASSISTANT_DAILY_LIMIT = parse_positive_int_env("AI_ASSISTANT_DAILY_LIMIT", 30)
+AI_ASSISTANT_MONTHLY_LIMIT = parse_positive_int_env("AI_ASSISTANT_MONTHLY_LIMIT", 300)
+AI_BEAUTY_DAILY_LIMIT = parse_positive_int_env("AI_BEAUTY_DAILY_LIMIT", 5)
+AI_BEAUTY_MONTHLY_LIMIT = parse_positive_int_env("AI_BEAUTY_MONTHLY_LIMIT", 30)
+
 openai_client = (
     OpenAI(api_key=OPENAI_API_KEY)
     if OPENAI_API_KEY
@@ -631,6 +643,16 @@ class BeautyAnalysis(db.Model):
     user = db.relationship("User", backref="beauty_analyses")
 
 
+class AIUsage(db.Model):
+    __tablename__ = "ai_usage"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=True, index=True)
+    ip_hash = db.Column(db.String(64), nullable=True, index=True)
+    feature = db.Column(db.String(50), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
 class Wishlist(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
@@ -940,6 +962,90 @@ def create_token(user):
         "exp": datetime.utcnow() + timedelta(days=1)
     }
     return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+
+
+def get_client_ip():
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+
+    return request.remote_addr or "unknown"
+
+
+def hash_usage_ip(ip_address):
+    return hashlib.sha256(f"{SECRET_KEY}:{ip_address}".encode("utf-8")).hexdigest()
+
+
+def normalize_usage_user_id(value):
+    try:
+        user_id = int(value)
+        return user_id if user_id > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def get_ai_usage_limits(feature):
+    if feature == "assistant":
+        return AI_ASSISTANT_DAILY_LIMIT, AI_ASSISTANT_MONTHLY_LIMIT
+
+    return AI_BEAUTY_DAILY_LIMIT, AI_BEAUTY_MONTHLY_LIMIT
+
+
+def check_ai_usage_limit(feature, user_id=None):
+    normalized_user_id = normalize_usage_user_id(user_id)
+    ip_hash = hash_usage_ip(get_client_ip())
+    daily_limit, monthly_limit = get_ai_usage_limits(feature)
+    now = datetime.utcnow()
+    day_start = now - timedelta(days=1)
+    month_start = now - timedelta(days=30)
+
+    query = AIUsage.query.filter_by(feature=feature)
+    if normalized_user_id:
+        query = query.filter(db.or_(
+            AIUsage.user_id == normalized_user_id,
+            AIUsage.ip_hash == ip_hash,
+        ))
+    else:
+        query = query.filter(AIUsage.ip_hash == ip_hash)
+
+    daily_count = query.filter(AIUsage.created_at >= day_start).count()
+    monthly_count = query.filter(AIUsage.created_at >= month_start).count()
+
+    if daily_limit > 0 and daily_count >= daily_limit:
+        return {
+            "allowed": False,
+            "error": "Daily AI usage limit reached. Please try again tomorrow.",
+            "limit_type": "daily",
+            "limit": daily_limit,
+            "used": daily_count,
+        }
+
+    if monthly_limit > 0 and monthly_count >= monthly_limit:
+        return {
+            "allowed": False,
+            "error": "Monthly AI usage limit reached. Please try again later.",
+            "limit_type": "monthly",
+            "limit": monthly_limit,
+            "used": monthly_count,
+        }
+
+    return {
+        "allowed": True,
+        "user_id": normalized_user_id,
+        "ip_hash": ip_hash,
+        "daily_limit": daily_limit,
+        "monthly_limit": monthly_limit,
+        "daily_used": daily_count,
+        "monthly_used": monthly_count,
+    }
+
+
+def record_ai_usage(feature, usage_check):
+    db.session.add(AIUsage(
+        user_id=usage_check.get("user_id"),
+        ip_hash=usage_check.get("ip_hash"),
+        feature=feature,
+    ))
 
 
 def token_required(f):
@@ -5282,16 +5388,34 @@ def assistant_chat():
         if not cleaned_messages:
             return jsonify({"error": "Please send a message"}), 400
 
+        usage_check = check_ai_usage_limit("assistant", user_id)
+        if not usage_check["allowed"]:
+            return jsonify({
+                "error": usage_check["error"],
+                "limit_type": usage_check["limit_type"],
+                "limit": usage_check["limit"],
+                "used": usage_check["used"],
+            }), 429
+
         context = get_assistant_context(user_id)
         reply, mode = generate_assistant_reply(cleaned_messages, context)
+        record_ai_usage("assistant", usage_check)
+        db.session.commit()
 
         return jsonify({
             "reply": reply,
             "mode": mode,
+            "usage": {
+                "daily_limit": usage_check["daily_limit"],
+                "daily_used": usage_check["daily_used"] + 1,
+                "monthly_limit": usage_check["monthly_limit"],
+                "monthly_used": usage_check["monthly_used"] + 1,
+            },
             "suggested_products": context.get("products", [])[:4],
         }), 200
 
     except Exception as e:
+        db.session.rollback()
         print("ASSISTANT CHAT ROUTE ERROR:", e)
         return jsonify({"error": "Assistant chat failed"}), 500
 
@@ -5388,6 +5512,15 @@ def analyze_beauty():
         if not user_id:
             return jsonify({"error": "Missing user_id"}), 400
 
+        usage_check = check_ai_usage_limit("beauty_analysis", user_id)
+        if not usage_check["allowed"]:
+            return jsonify({
+                "error": usage_check["error"],
+                "limit_type": usage_check["limit_type"],
+                "limit": usage_check["limit"],
+                "used": usage_check["used"],
+            }), 429
+
         if USE_REAL_AI:
             analysis = analyze_beauty_with_openai(image)
         else:
@@ -5423,10 +5556,17 @@ def analyze_beauty():
         )
 
         db.session.add(beauty_analysis)
+        record_ai_usage("beauty_analysis", usage_check)
         db.session.commit()
 
         analysis["analysis_id"] = beauty_analysis.id
         analysis["recommended_products"] = recommendations
+        analysis["usage"] = {
+            "daily_limit": usage_check["daily_limit"],
+            "daily_used": usage_check["daily_used"] + 1,
+            "monthly_limit": usage_check["monthly_limit"],
+            "monthly_used": usage_check["monthly_used"] + 1,
+        }
 
         return jsonify(analysis), 200
 
