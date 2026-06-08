@@ -3336,6 +3336,8 @@ def register():
         db.session.rollback()
         return jsonify({"error": "Could not send verification email. Please try again."}), 500
 
+    print("VERIFICATION CODE CREATED:", {"email": email, "code": code})
+
     db.session.commit()
 
     return jsonify({
@@ -3409,6 +3411,8 @@ def resend_verification_email():
     if not send_verification_email(user, code):
         db.session.rollback()
         return jsonify({"error": "Failed to resend verification email"}), 500
+
+    print("VERIFICATION CODE RESENT:", {"email": email, "code": code})
 
     db.session.commit()
 
