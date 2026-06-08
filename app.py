@@ -311,6 +311,22 @@ class User(db.Model):
             "is_admin": self.is_admin,
         }
 
+
+class EmailVerificationCode(db.Model):
+    __tablename__ = "email_verification_code"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    email = db.Column(db.String(200), nullable=False, index=True)
+    code_hash = db.Column(db.String(64), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    attempts = db.Column(db.Integer, default=0)
+    consumed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref="email_verification_codes")
+
+
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
@@ -962,6 +978,106 @@ def create_token(user):
         "exp": datetime.utcnow() + timedelta(days=1)
     }
     return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+
+
+def create_email_verification_code():
+    return f"{random.SystemRandom().randint(0, 999999):06d}"
+
+
+def hash_email_verification_code(email, code):
+    normalized_email = (email or "").strip().lower()
+    normalized_code = (code or "").strip()
+    return hashlib.sha256(
+        f"{SECRET_KEY}:{normalized_email}:{normalized_code}".encode("utf-8")
+    ).hexdigest()
+
+
+def create_email_verification_record(user):
+    EmailVerificationCode.query.filter_by(
+        user_id=user.id,
+        consumed_at=None,
+    ).update({"consumed_at": datetime.utcnow()})
+
+    code = create_email_verification_code()
+    record = EmailVerificationCode(
+        user_id=user.id,
+        email=user.email,
+        code_hash=hash_email_verification_code(user.email, code),
+        expires_at=datetime.utcnow() + timedelta(minutes=15),
+    )
+    db.session.add(record)
+    return code
+
+
+def send_verification_email(user, code):
+    if not SENDGRID_API_KEY or not SENDGRID_FROM_EMAIL:
+        print("VERIFICATION EMAIL SKIPPED: SendGrid not configured")
+        return False
+
+    customer_name = html.escape(user.full_name or "there")
+    safe_code = html.escape(code)
+    text_content = (
+        f"Hi {user.full_name or 'there'},\n\n"
+        "Welcome to Zuri Elegance. Use this verification code to activate your account:\n\n"
+        f"{code}\n\n"
+        "This code expires in 15 minutes. If you did not create this account, you can ignore this email.\n\n"
+        "With elegance,\n"
+        "Zuri Elegance"
+    )
+    html_content = f"""
+    <div style="font-family:Arial,sans-serif;color:#2b2023;padding:24px;background:#fbf7f1;">
+      <div style="max-width:560px;margin:auto;background:#fff;border:1px solid #eadfd6;border-radius:22px;padding:28px;">
+        <h1 style="margin:0;color:#50242A;font-family:Georgia,serif;">Zuri Elegance</h1>
+        <p style="color:#A38560;font-weight:800;letter-spacing:1px;">EMAIL VERIFICATION</p>
+        <p>Hi {customer_name},</p>
+        <p>Welcome to Zuri Elegance. Use this verification code to activate your account:</p>
+        <div style="margin:24px 0;padding:18px 22px;border-radius:16px;background:#50242A;color:#C4A26A;font-size:32px;font-weight:900;letter-spacing:8px;text-align:center;">
+          {safe_code}
+        </div>
+        <p>This code expires in 15 minutes. If you did not create this account, you can ignore this email.</p>
+        <p style="color:#A38560;font-weight:800;">With elegance,<br/>Zuri Elegance</p>
+      </div>
+    </div>
+    """
+
+    payload = {
+        "personalizations": [
+            {
+                "to": [{"email": user.email}],
+                "subject": "Your Zuri Elegance verification code",
+            }
+        ],
+        "from": {
+            "email": SENDGRID_FROM_EMAIL,
+            "name": "Zuri Elegance",
+        },
+        "content": [
+            {
+                "type": "text/plain",
+                "value": text_content,
+            },
+            {
+                "type": "text/html",
+                "value": html_content,
+            }
+        ],
+    }
+
+    response = requests.post(
+        "https://api.sendgrid.com/v3/mail/send",
+        headers={
+            "Authorization": f"Bearer {SENDGRID_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=30,
+    )
+
+    if response.status_code not in [200, 202]:
+        print("VERIFICATION SENDGRID ERROR:", response.text)
+        return False
+
+    return True
 
 
 def get_client_ip():
@@ -3197,18 +3313,14 @@ def register():
     )
 
     db.session.add(user)
-    db.session.commit()
+    db.session.flush()
+    code = create_email_verification_record(user)
 
-    try:
-        twilio_client.verify.v2.services(
-            TWILIO_VERIFY_SERVICE_SID
-        ).verifications.create(
-            to=email,
-            channel="email"
-        )
-    except Exception as e:
-        print("TWILIO REGISTER VERIFY ERROR:", e)
-        return jsonify({"error": "User created, but failed to send verification email"}), 500
+    if not send_verification_email(user, code):
+        db.session.rollback()
+        return jsonify({"error": "Could not send verification email. Please try again."}), 500
+
+    db.session.commit()
 
     return jsonify({
         "message": "Registration successful. Verification code sent.",
@@ -3230,21 +3342,30 @@ def verify_email():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    try:
-        verification_check = twilio_client.verify.v2.services(
-            TWILIO_VERIFY_SERVICE_SID
-        ).verification_checks.create(
-            to=email,
-            code=code
-        )
-    except Exception as e:
-        print("TWILIO VERIFY CHECK ERROR:", e)
-        return jsonify({"error": "Verification check failed"}), 500
+    if user.is_verified:
+        return jsonify({"message": "Email verified successfully"}), 200
 
-    if verification_check.status != "approved":
+    verification = (
+        EmailVerificationCode.query
+        .filter_by(user_id=user.id, consumed_at=None)
+        .order_by(EmailVerificationCode.created_at.desc())
+        .first()
+    )
+
+    if not verification or verification.expires_at < datetime.utcnow():
+        return jsonify({"error": "Verification code expired. Please request a new code."}), 400
+
+    if verification.attempts >= 5:
+        return jsonify({"error": "Too many verification attempts. Please request a new code."}), 429
+
+    verification.attempts += 1
+
+    if verification.code_hash != hash_email_verification_code(email, code):
+        db.session.commit()
         return jsonify({"error": "Invalid or expired verification code"}), 400
 
     user.is_verified = True
+    verification.consumed_at = datetime.utcnow()
     db.session.commit()
 
     return jsonify({
@@ -3267,16 +3388,13 @@ def resend_verification_email():
     if user.is_verified:
         return jsonify({"message": "Email is already verified"}), 200
 
-    try:
-        twilio_client.verify.v2.services(
-            TWILIO_VERIFY_SERVICE_SID
-        ).verifications.create(
-            to=email,
-            channel="email"
-        )
-    except Exception as e:
-        print("TWILIO RESEND ERROR:", e)
+    code = create_email_verification_record(user)
+
+    if not send_verification_email(user, code):
+        db.session.rollback()
         return jsonify({"error": "Failed to resend verification email"}), 500
+
+    db.session.commit()
 
     return jsonify({"message": "Verification email sent again"}), 200
 
