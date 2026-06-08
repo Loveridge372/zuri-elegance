@@ -10,6 +10,8 @@ import base64
 import json
 import random
 import re
+import smtplib
+from email.message import EmailMessage
 from urllib.parse import urlencode, urlparse
 
 from openai import OpenAI
@@ -228,6 +230,15 @@ PAYSTACK_CALLBACK_URL = normalize_public_url(
 
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL")
+
+SMTP_HOST = os.getenv("SMTP_HOST")
+SMTP_PORT = int(os.getenv("SMTP_PORT") or "587")
+SMTP_USERNAME = os.getenv("SMTP_USERNAME")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL") or SMTP_USERNAME
+SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Zuri Elegance")
+SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
@@ -1010,8 +1021,8 @@ def create_email_verification_record(user):
 
 
 def send_verification_email(user, code):
-    if not SENDGRID_API_KEY or not SENDGRID_FROM_EMAIL:
-        print("VERIFICATION EMAIL SKIPPED: SendGrid not configured")
+    if not SMTP_HOST or not SMTP_USERNAME or not SMTP_PASSWORD or not SMTP_FROM_EMAIL:
+        print("VERIFICATION EMAIL SKIPPED: SMTP not configured")
         return False
 
     customer_name = html.escape(user.full_name or "there")
@@ -1040,56 +1051,35 @@ def send_verification_email(user, code):
     </div>
     """
 
-    payload = {
-        "personalizations": [
-            {
-                "to": [{"email": user.email}],
-                "subject": "Your Zuri Elegance verification code",
-            }
-        ],
-        "from": {
-            "email": SENDGRID_FROM_EMAIL,
-            "name": "Zuri Elegance",
-        },
-        "content": [
-            {
-                "type": "text/plain",
-                "value": text_content,
-            },
-            {
-                "type": "text/html",
-                "value": html_content,
-            }
-        ],
-    }
+    message = EmailMessage()
+    message["Subject"] = "Your Zuri Elegance verification code"
+    message["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
+    message["To"] = user.email
+    message.set_content(text_content)
+    message.add_alternative(html_content, subtype="html")
 
-    response = requests.post(
-        "https://api.sendgrid.com/v3/mail/send",
-        headers={
-            "Authorization": f"Bearer {SENDGRID_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=30,
-    )
-
-    message_id = response.headers.get("x-message-id") or response.headers.get("X-Message-Id")
-
-    if response.status_code not in [200, 202]:
-        print(
-            "VERIFICATION SENDGRID ERROR:",
-            response.status_code,
-            response.text,
-        )
+    try:
+        if SMTP_USE_SSL:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                server.send_message(message)
+        else:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+                if SMTP_USE_TLS:
+                    server.starttls()
+                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                server.send_message(message)
+    except Exception as e:
+        print("VERIFICATION SMTP ERROR:", repr(e))
         return False
 
     print(
-        "VERIFICATION SENDGRID SENT:",
+        "VERIFICATION SMTP SENT:",
         {
             "to": user.email,
-            "from": SENDGRID_FROM_EMAIL,
-            "status": response.status_code,
-            "message_id": message_id,
+            "from": SMTP_FROM_EMAIL,
+            "host": SMTP_HOST,
+            "port": SMTP_PORT,
         },
     )
 
@@ -3336,8 +3326,6 @@ def register():
         db.session.rollback()
         return jsonify({"error": "Could not send verification email. Please try again."}), 500
 
-    print("VERIFICATION CODE CREATED:", {"email": email, "code": code})
-
     db.session.commit()
 
     return jsonify({
@@ -3411,8 +3399,6 @@ def resend_verification_email():
     if not send_verification_email(user, code):
         db.session.rollback()
         return jsonify({"error": "Failed to resend verification email"}), 500
-
-    print("VERIFICATION CODE RESENT:", {"email": email, "code": code})
 
     db.session.commit()
 
