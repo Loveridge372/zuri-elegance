@@ -1073,9 +1073,25 @@ def send_verification_email(user, code):
         timeout=30,
     )
 
+    message_id = response.headers.get("x-message-id") or response.headers.get("X-Message-Id")
+
     if response.status_code not in [200, 202]:
-        print("VERIFICATION SENDGRID ERROR:", response.text)
+        print(
+            "VERIFICATION SENDGRID ERROR:",
+            response.status_code,
+            response.text,
+        )
         return False
+
+    print(
+        "VERIFICATION SENDGRID SENT:",
+        {
+            "to": user.email,
+            "from": SENDGRID_FROM_EMAIL,
+            "status": response.status_code,
+            "message_id": message_id,
+        },
+    )
 
     return True
 
