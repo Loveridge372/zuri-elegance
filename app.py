@@ -75,22 +75,39 @@ extra_cors_origins = [
     for origin in os.getenv("CORS_ORIGINS", "").split(",")
     if normalize_public_url(origin, "")
 ]
+ALLOWED_CORS_ORIGINS = {
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://ephemeral-dusk-efaed3.netlify.app",
+    FRONTEND_URL,
+    *extra_cors_origins,
+}
 
 CORS(
     app,
     resources={
         r"/*": {
-            "origins": [
-                "http://localhost:5173",
-                "http://127.0.0.1:5173",
-                "https://ephemeral-dusk-efaed3.netlify.app",
-                FRONTEND_URL,
-                *extra_cors_origins,
-            ]
+            "origins": list(ALLOWED_CORS_ORIGINS),
+            "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"],
         }
     },
     supports_credentials=True
 )
+
+
+@app.after_request
+def apply_cors_headers(response):
+    origin = request.headers.get("Origin")
+
+    if origin in ALLOWED_CORS_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        response.headers["Vary"] = "Origin"
+
+    return response
 
 
 DB_USER = os.getenv("DB_USER", "admin")
@@ -273,6 +290,18 @@ print("PAYSTACK SECRET LOADED:", "YES" if PAYSTACK_SECRET_KEY else "NO")
 print("FRONTEND URL:", FRONTEND_URL)
 print("PAYSTACK CALLBACK URL:", PAYSTACK_CALLBACK_URL)
 print("APP ENV:", APP_ENV)
+print(
+    "SMTP CONFIG:",
+    {
+        "host": SMTP_HOST,
+        "port": SMTP_PORT,
+        "username_loaded": "YES" if SMTP_USERNAME else "NO",
+        "password_loaded": "YES" if SMTP_PASSWORD else "NO",
+        "from": SMTP_FROM_EMAIL,
+        "ssl": SMTP_USE_SSL,
+        "tls": SMTP_USE_TLS,
+    },
+)
 
 
 @app.route("/health", methods=["GET"])
