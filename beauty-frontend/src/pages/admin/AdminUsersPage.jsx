@@ -7,6 +7,7 @@ import {
   FaFloppyDisk,
   FaMagnifyingGlass,
   FaShieldHalved,
+  FaTrashCan,
   FaUser,
   FaUsers,
 } from "react-icons/fa6";
@@ -64,6 +65,41 @@ export default function AdminUsersPage() {
       loadUsers();
     } catch (err) {
       console.error("UPDATE USER ERROR:", err);
+      setMessage("Could not connect to server.");
+    }
+  };
+
+  const deleteUser = async (user) => {
+    setMessage("");
+
+    if (user.is_admin) {
+      setMessage("Admin accounts cannot be deleted here.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ${user.full_name || user.email || "this customer"}? This will remove their account so the email can be registered again.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${user.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessage(data.error || "Could not delete customer.");
+        return;
+      }
+
+      setMessage(data.message || "Customer deleted successfully.");
+      setUsers((prev) => prev.filter((item) => item.id !== user.id));
+    } catch (err) {
+      console.error("DELETE USER ERROR:", err);
       setMessage("Could not connect to server.");
     }
   };
@@ -194,9 +230,20 @@ export default function AdminUsersPage() {
                 </label>
               </div>
 
-              <button className="save-btn" onClick={() => updateUser(user)}>
-                <FaFloppyDisk /> Save User
-              </button>
+              <div className="user-actions">
+                <button className="save-btn" onClick={() => updateUser(user)}>
+                  <FaFloppyDisk /> Save User
+                </button>
+
+                <button
+                  className="delete-btn"
+                  onClick={() => deleteUser(user)}
+                  disabled={!!user.is_admin}
+                  title={user.is_admin ? "Admin accounts cannot be deleted here" : "Delete customer"}
+                >
+                  <FaTrashCan /> Delete Customer
+                </button>
+              </div>
             </article>
           ))
         )}
@@ -459,7 +506,15 @@ const css = `
   accent-color: ${WINE};
 }
 
-.save-btn {
+.user-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.save-btn,
+.delete-btn {
   width: 100%;
   border: none;
   border-radius: 17px;
@@ -472,6 +527,19 @@ const css = `
   justify-content: center;
   align-items: center;
   gap: 9px;
+}
+
+.delete-btn {
+  width: auto;
+  min-width: 190px;
+  background: #fff;
+  color: #a13232;
+  border: 1px solid rgba(161,50,50,.22);
+}
+
+.delete-btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
 }
 
 .empty {
@@ -519,6 +587,14 @@ const css = `
 
   .user-grid {
     grid-template-columns: 1fr;
+  }
+
+  .user-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .delete-btn {
+    width: 100%;
   }
 }
 `;

@@ -2691,6 +2691,43 @@ def admin_update_user(user_data, user_id):
         return jsonify({"error": "Failed to update user"}), 500
 
 
+@app.route("/admin/users/<int:user_id>", methods=["DELETE"])
+@token_required
+@admin_required
+def admin_delete_user(user_data, user_id):
+    try:
+        user = User.query.get(user_id)
+
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        if user.is_admin:
+            return jsonify({"error": "Admin accounts cannot be deleted here"}), 400
+
+        EmailVerificationCode.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+        CartItem.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+        Wishlist.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+        Review.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+        Notification.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+        BeautyAnalysis.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+        AIUsage.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+        RewardAdjustment.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+        order_ids = [order.id for order in Order.query.filter_by(user_id=user_id).all()]
+        if order_ids:
+            OrderItem.query.filter(OrderItem.order_id.in_(order_ids)).delete(synchronize_session=False)
+        Order.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+
+        db.session.delete(user)
+        db.session.commit()
+
+        return jsonify({"message": "Customer deleted successfully"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("ADMIN DELETE USER ERROR:", e)
+        return jsonify({"error": "Failed to delete customer"}), 500
+
+
 # -----------------------------
 # ADMIN PRODUCTS
 # -----------------------------
