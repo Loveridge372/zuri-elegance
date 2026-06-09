@@ -1049,11 +1049,55 @@ def create_email_verification_record(user):
     return code
 
 
-def send_verification_email(user, code):
+def send_smtp_email(to_email, subject, text_content, html_content, attachments=None, log_label="EMAIL"):
     if not SMTP_HOST or not SMTP_USERNAME or not SMTP_PASSWORD or not SMTP_FROM_EMAIL:
-        print("VERIFICATION EMAIL SKIPPED: SMTP not configured")
+        print(f"{log_label} SKIPPED: SMTP not configured")
         return False
 
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
+    message["To"] = to_email
+    message.set_content(text_content)
+    message.add_alternative(html_content, subtype="html")
+
+    for attachment in attachments or []:
+        message.add_attachment(
+            attachment["content"],
+            maintype=attachment.get("maintype", "application"),
+            subtype=attachment.get("subtype", "octet-stream"),
+            filename=attachment["filename"],
+        )
+
+    try:
+        if SMTP_USE_SSL:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                server.send_message(message)
+        else:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+                if SMTP_USE_TLS:
+                    server.starttls()
+                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                server.send_message(message)
+    except Exception as e:
+        print(f"{log_label} SMTP ERROR:", repr(e))
+        return False
+
+    print(
+        f"{log_label} SMTP SENT:",
+        {
+            "to": to_email,
+            "from": SMTP_FROM_EMAIL,
+            "host": SMTP_HOST,
+            "port": SMTP_PORT,
+        },
+    )
+
+    return True
+
+
+def send_verification_email(user, code):
     customer_name = html.escape(user.full_name or "there")
     safe_code = html.escape(code)
     text_content = (
@@ -1080,39 +1124,13 @@ def send_verification_email(user, code):
     </div>
     """
 
-    message = EmailMessage()
-    message["Subject"] = "Your Zuri Elegance verification code"
-    message["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
-    message["To"] = user.email
-    message.set_content(text_content)
-    message.add_alternative(html_content, subtype="html")
-
-    try:
-        if SMTP_USE_SSL:
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=30) as server:
-                server.login(SMTP_USERNAME, SMTP_PASSWORD)
-                server.send_message(message)
-        else:
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
-                if SMTP_USE_TLS:
-                    server.starttls()
-                server.login(SMTP_USERNAME, SMTP_PASSWORD)
-                server.send_message(message)
-    except Exception as e:
-        print("VERIFICATION SMTP ERROR:", repr(e))
-        return False
-
-    print(
-        "VERIFICATION SMTP SENT:",
-        {
-            "to": user.email,
-            "from": SMTP_FROM_EMAIL,
-            "host": SMTP_HOST,
-            "port": SMTP_PORT,
-        },
+    return send_smtp_email(
+        user.email,
+        "Your Zuri Elegance verification code",
+        text_content,
+        html_content,
+        log_label="VERIFICATION",
     )
-
-    return True
 
 
 def get_client_ip():
@@ -3445,12 +3463,17 @@ def create_password_reset_token(user):
 
 
 def send_password_reset_email(user, reset_link):
-    if not SENDGRID_API_KEY or not SENDGRID_FROM_EMAIL:
-        print("PASSWORD RESET EMAIL SKIPPED: SendGrid not configured")
-        return False
-
-    customer_name = user.full_name or "there"
-    html = f"""
+    customer_name = html.escape(user.full_name or "there")
+    safe_reset_link = html.escape(reset_link)
+    text_content = (
+        f"Hi {user.full_name or 'there'},\n\n"
+        "We received a request to reset your Zuri Elegance password.\n\n"
+        f"Reset your password here: {reset_link}\n\n"
+        "This link expires in 30 minutes. If you did not request this, you can ignore this email.\n\n"
+        "With elegance,\n"
+        "Zuri Elegance"
+    )
+    html_content = f"""
     <div style="font-family:Arial,sans-serif;color:#2b2023;padding:24px;background:#fbf7f1;">
       <div style="max-width:560px;margin:auto;background:#fff;border:1px solid #eadfd6;border-radius:22px;padding:28px;">
         <h1 style="margin:0;color:#50242A;font-family:Georgia,serif;">Zuri Elegance</h1>
@@ -3458,7 +3481,7 @@ def send_password_reset_email(user, reset_link):
         <p>Hi {customer_name},</p>
         <p>We received a request to reset your Zuri Elegance password. Use the button below to create a new password.</p>
         <p style="margin:26px 0;">
-          <a href="{reset_link}"
+          <a href="{safe_reset_link}"
              style="background:#50242A;color:#fff;padding:13px 20px;border-radius:12px;text-decoration:none;font-weight:800;">
             Reset Password
           </a>
@@ -3469,40 +3492,13 @@ def send_password_reset_email(user, reset_link):
     </div>
     """
 
-    payload = {
-        "personalizations": [
-            {
-                "to": [{"email": user.email}],
-                "subject": "Reset your Zuri Elegance password",
-            }
-        ],
-        "from": {
-            "email": SENDGRID_FROM_EMAIL,
-            "name": "Zuri Elegance",
-        },
-        "content": [
-            {
-                "type": "text/html",
-                "value": html,
-            }
-        ],
-    }
-
-    response = requests.post(
-        "https://api.sendgrid.com/v3/mail/send",
-        headers={
-            "Authorization": f"Bearer {SENDGRID_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=30,
+    return send_smtp_email(
+        user.email,
+        "Reset your Zuri Elegance password",
+        text_content,
+        html_content,
+        log_label="PASSWORD RESET",
     )
-
-    if response.status_code not in [200, 202]:
-        print("PASSWORD RESET SENDGRID ERROR:", response.text)
-        return False
-
-    return True
 
 
 @app.route("/forgot-password", methods=["POST"])
@@ -4398,6 +4394,104 @@ def send_order_email(to_email, customer_name, order):
 
     except Exception as e:
         print("EMAIL ERROR:", e)
+        return None
+
+
+def send_order_email(to_email, customer_name, order):
+    try:
+        status = (order.delivery_status or "Processing").lower()
+
+        if status == "packed":
+            subject = f"Your Zuri Elegance order #{order.id} has been packed"
+            heading = "Your Order Has Been Packed"
+            intro = "Your order has been packed and is being prepared for delivery."
+        elif status == "out for delivery":
+            subject = f"Your Zuri Elegance order #{order.id} is out for delivery"
+            heading = "Your Order Is Out For Delivery"
+            intro = "Good news - your order is on its way. Please keep your phone nearby."
+        elif status == "delivered":
+            subject = f"Your Zuri Elegance order #{order.id} has been delivered"
+            heading = "Your Order Has Been Delivered"
+            intro = "Your order has been delivered. We hope you love your Zuri Elegance purchase."
+        elif status in ["delayed", "delay"]:
+            subject = f"Update on your Zuri Elegance order #{order.id}"
+            heading = "Delivery Update"
+            intro = "Your order is taking a little longer than expected, but we are working to get it to you as soon as possible."
+        else:
+            subject = f"Zuri Elegance Order Confirmation #{order.id}"
+            heading = "Order Confirmed"
+            intro = "Your payment was successful and your order is now being processed."
+
+        items_html = "".join([
+            f"<li>{html.escape(item.name or 'Product')} x{item.quantity} - R {float(item.price or 0):.2f}</li>"
+            for item in order.items
+        ])
+        items_text = "\n".join([
+            f"- {item.name or 'Product'} x{item.quantity} - R {float(item.price or 0):.2f}"
+            for item in order.items
+        ])
+
+        tracking_link = build_tracking_link(order)
+        text_content = f"""
+Hi {customer_name or "there"},
+
+{intro}
+
+Order ID: #{order.id}
+Reference: {order.reference}
+Tracking: {order.tracking_number or "Pending"}
+Status: {order.delivery_status or "Processing"}
+Total: R {float(order.total or 0):.2f}
+
+Items:
+{items_text}
+
+Track your order: {tracking_link}
+
+Thank you for shopping with Zuri Elegance.
+"""
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; color:#2b2023; padding:20px;">
+          <h1 style="color:#50242A;">Zuri Elegance</h1>
+          <h2>{html.escape(heading)}</h2>
+          <p>Hi {html.escape(customer_name or "there")},</p>
+          <p>{html.escape(intro)}</p>
+          <p><strong>Order ID:</strong> #{order.id}</p>
+          <p><strong>Reference:</strong> {html.escape(order.reference or "")}</p>
+          <p><strong>Tracking:</strong> {html.escape(order.tracking_number or "Pending")}</p>
+          <p><strong>Status:</strong> {html.escape(order.delivery_status or "Processing")}</p>
+          <p><strong>Total:</strong> R {float(order.total or 0):.2f}</p>
+          <h3>Items</h3>
+          <ul>{items_html}</ul>
+          <p>
+            <a href="{html.escape(tracking_link)}"
+               style="background:#50242A;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;">
+              Track Your Order
+            </a>
+          </p>
+          <p style="color:#A38560;font-weight:bold;">Thank you for shopping with Zuri Elegance.</p>
+        </div>
+        """
+
+        invoice_pdf = generate_invoice_pdf_bytes(order)
+        return send_smtp_email(
+            to_email,
+            subject,
+            text_content,
+            html_content,
+            attachments=[
+                {
+                    "content": invoice_pdf,
+                    "maintype": "application",
+                    "subtype": "pdf",
+                    "filename": f"zuri-elegance-invoice-{order.id}.pdf",
+                }
+            ],
+            log_label="ORDER EMAIL",
+        )
+
+    except Exception as e:
+        print("ORDER EMAIL ERROR:", e)
         return None
 
 
