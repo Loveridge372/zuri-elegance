@@ -1076,7 +1076,7 @@ def create_email_verification_record(user):
 def send_smtp_email(to_email, subject, text_content, html_content, attachments=None, log_label="EMAIL"):
     if not SMTP_HOST or not SMTP_USERNAME or not SMTP_PASSWORD or not SMTP_FROM_EMAIL:
         print(f"{log_label} SKIPPED: SMTP not configured")
-        return False
+        return send_sendgrid_email(to_email, subject, text_content, html_content, attachments, log_label)
 
     message = EmailMessage()
     message["Subject"] = subject
@@ -1106,7 +1106,7 @@ def send_smtp_email(to_email, subject, text_content, html_content, attachments=N
                 server.send_message(message)
     except Exception as e:
         print(f"{log_label} SMTP ERROR:", repr(e))
-        return False
+        return send_sendgrid_email(to_email, subject, text_content, html_content, attachments, log_label)
 
     print(
         f"{log_label} SMTP SENT:",
@@ -1118,6 +1118,74 @@ def send_smtp_email(to_email, subject, text_content, html_content, attachments=N
         },
     )
 
+    return True
+
+
+def send_sendgrid_email(to_email, subject, text_content, html_content, attachments=None, log_label="EMAIL"):
+    if not SENDGRID_API_KEY or not SENDGRID_FROM_EMAIL:
+        print(f"{log_label} SENDGRID SKIPPED: SendGrid not configured")
+        return False
+
+    payload = {
+        "personalizations": [
+            {
+                "to": [{"email": to_email}],
+                "subject": subject,
+            }
+        ],
+        "from": {
+            "email": SENDGRID_FROM_EMAIL,
+            "name": SMTP_FROM_NAME or "Zuri Elegance",
+        },
+        "content": [
+            {
+                "type": "text/plain",
+                "value": text_content,
+            },
+            {
+                "type": "text/html",
+                "value": html_content,
+            },
+        ],
+    }
+
+    if attachments:
+        payload["attachments"] = [
+            {
+                "content": base64.b64encode(attachment["content"]).decode("utf-8"),
+                "type": f"{attachment.get('maintype', 'application')}/{attachment.get('subtype', 'octet-stream')}",
+                "filename": attachment["filename"],
+                "disposition": "attachment",
+            }
+            for attachment in attachments
+        ]
+
+    try:
+        response = requests.post(
+            "https://api.sendgrid.com/v3/mail/send",
+            headers={
+                "Authorization": f"Bearer {SENDGRID_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=SMTP_TIMEOUT_SECONDS,
+        )
+    except Exception as e:
+        print(f"{log_label} SENDGRID ERROR:", repr(e))
+        return False
+
+    if response.status_code not in [200, 202]:
+        print(f"{log_label} SENDGRID ERROR:", response.status_code, response.text)
+        return False
+
+    print(
+        f"{log_label} SENDGRID SENT:",
+        {
+            "to": to_email,
+            "from": SENDGRID_FROM_EMAIL,
+            "status": response.status_code,
+        },
+    )
     return True
 
 
