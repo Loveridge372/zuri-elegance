@@ -173,6 +173,17 @@ export default function AdminUsersPage() {
                   <FaShieldHalved />
                   {user.is_admin ? "Admin" : "Customer"}
                 </div>
+
+                {!user.is_admin && (
+                  <button
+                    className="icon-delete-btn"
+                    onClick={() => deleteUser(user)}
+                    title="Delete customer"
+                  >
+                    <FaTrashCan />
+                    <span>Delete</span>
+                  </button>
+                )}
               </div>
 
               <div className="user-grid">
@@ -446,6 +457,20 @@ const css = `
   box-shadow: inset 0 0 0 1px rgba(163,133,96,.22);
 }
 
+.icon-delete-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 11px 14px;
+  background: rgba(161,50,50,.10);
+  color: #a13232;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
 .user-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -583,6 +608,11 @@ const css = `
   .role {
     grid-column: 1 / -1;
     width: fit-content;
+  }
+
+  .icon-delete-btn {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   .user-grid {
