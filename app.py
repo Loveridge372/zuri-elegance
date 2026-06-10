@@ -3506,13 +3506,15 @@ def resend_verification_email():
         return jsonify({"message": "Email is already verified"}), 200
 
     code = create_email_verification_record(user)
-    db.session.commit()
 
     if not send_verification_email(user, code):
+        db.session.rollback()
         return jsonify({
-            "message": "A new verification code was created, but the email could not be resent. Please try again shortly.",
+            "message": "Could not resend right now. Please use the verification code already sent to your email, or try again shortly.",
             "email_sent": False,
-        }), 202
+        }), 200
+
+    db.session.commit()
 
     return jsonify({
         "message": "Verification email sent again",
