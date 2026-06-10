@@ -30,6 +30,7 @@ from dotenv import load_dotenv
 from flask import Flask, Response, redirect, request, jsonify, send_from_directory
 from flask_cors import CORS, cross_origin
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -141,6 +142,9 @@ def handle_internal_server_error(error):
 
 @app.errorhandler(Exception)
 def handle_unexpected_error(error):
+    if isinstance(error, HTTPException):
+        return jsonify({"error": error.description}), error.code
+
     print("UNEXPECTED SERVER ERROR:", repr(error))
     return jsonify({"error": "Internal server error"}), 500
 
@@ -343,6 +347,14 @@ def health_check():
         "status": "ok",
         "environment": APP_ENV,
         "timestamp": datetime.utcnow().isoformat(),
+    }), 200
+
+
+@app.route("/", methods=["GET", "HEAD"])
+def root_check():
+    return jsonify({
+        "status": "ok",
+        "service": "zuri-elegance-api",
     }), 200
 
 
