@@ -292,7 +292,18 @@ SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL") or SMTP_USERNAME
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Zuri Elegance")
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
 SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
-SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT_SECONDS") or "10")
+
+
+def parse_smtp_timeout():
+    try:
+        requested_timeout = int(os.getenv("SMTP_TIMEOUT_SECONDS") or "8")
+    except (TypeError, ValueError):
+        requested_timeout = 8
+
+    return min(max(requested_timeout, 3), 8)
+
+
+SMTP_TIMEOUT_SECONDS = parse_smtp_timeout()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
