@@ -279,6 +279,7 @@ SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL") or SMTP_USERNAME
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Zuri Elegance")
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
 SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
+SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT_SECONDS") or "10")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
@@ -1094,11 +1095,11 @@ def send_smtp_email(to_email, subject, text_content, html_content, attachments=N
 
     try:
         if SMTP_USE_SSL:
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT_SECONDS) as server:
                 server.login(SMTP_USERNAME, SMTP_PASSWORD)
                 server.send_message(message)
         else:
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT_SECONDS) as server:
                 if SMTP_USE_TLS:
                     server.starttls()
                 server.login(SMTP_USERNAME, SMTP_PASSWORD)
@@ -3428,16 +3429,19 @@ def register():
     db.session.add(user)
     db.session.flush()
     code = create_email_verification_record(user)
+    db.session.commit()
 
     if not send_verification_email(user, code):
-        db.session.rollback()
-        return jsonify({"error": "Could not send verification email. Please try again."}), 500
-
-    db.session.commit()
+        return jsonify({
+            "message": "Registration successful, but verification email could not be sent. Please use Resend Code.",
+            "email": email,
+            "email_sent": False,
+        }), 202
 
     return jsonify({
         "message": "Registration successful. Verification code sent.",
-        "email": email
+        "email": email,
+        "email_sent": True,
     }), 201
 
 
