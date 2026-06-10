@@ -296,14 +296,52 @@ SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
 
 def parse_smtp_timeout():
     try:
-        requested_timeout = int(os.getenv("SMTP_TIMEOUT_SECONDS") or "8")
+        requested_timeout = int(os.getenv("SMTP_TIMEOUT_SECONDS") or "5")
     except (TypeError, ValueError):
-        requested_timeout = 8
+        requested_timeout = 5
 
-    return min(max(requested_timeout, 3), 8)
+    return min(max(requested_timeout, 3), 5)
 
 
 SMTP_TIMEOUT_SECONDS = parse_smtp_timeout()
+
+
+def build_smtp_attempts():
+    if not SMTP_HOST:
+        return []
+
+    hosts = [SMTP_HOST]
+    normalized_host = SMTP_HOST.lower()
+    if normalized_host == "smtp.zurielegance.co.za":
+        hosts.append("mail.zurielegance.co.za")
+    elif normalized_host == "mail.zurielegance.co.za":
+        hosts.append("smtp.zurielegance.co.za")
+
+    mode_options = [
+        (SMTP_PORT, SMTP_USE_SSL, SMTP_USE_TLS, "configured"),
+        (465, True, False, "465 SSL"),
+        (587, False, True, "587 STARTTLS"),
+    ]
+
+    attempts = []
+    seen = set()
+    for host in hosts:
+        for port, use_ssl, use_tls, label in mode_options:
+            key = (host.lower(), int(port), bool(use_ssl), bool(use_tls))
+            if key in seen:
+                continue
+            seen.add(key)
+            attempts.append(
+                {
+                    "host": host,
+                    "port": int(port),
+                    "use_ssl": bool(use_ssl),
+                    "use_tls": bool(use_tls),
+                    "label": label,
+                }
+            )
+
+    return attempts
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
@@ -1125,32 +1163,58 @@ def send_smtp_email(to_email, subject, text_content, html_content, attachments=N
             filename=attachment["filename"],
         )
 
-    try:
-        if SMTP_USE_SSL:
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT_SECONDS) as server:
-                server.login(SMTP_USERNAME, SMTP_PASSWORD)
-                server.send_message(message)
-        else:
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT_SECONDS) as server:
-                if SMTP_USE_TLS:
-                    server.starttls()
-                server.login(SMTP_USERNAME, SMTP_PASSWORD)
-                server.send_message(message)
-    except Exception as e:
-        print(f"{log_label} SMTP ERROR:", repr(e))
-        return False
+    attempt_errors = []
+    for attempt in build_smtp_attempts():
+        try:
+            if attempt["use_ssl"]:
+                with smtplib.SMTP_SSL(
+                    attempt["host"],
+                    attempt["port"],
+                    timeout=SMTP_TIMEOUT_SECONDS,
+                ) as server:
+                    server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                    server.send_message(message)
+            else:
+                with smtplib.SMTP(
+                    attempt["host"],
+                    attempt["port"],
+                    timeout=SMTP_TIMEOUT_SECONDS,
+                ) as server:
+                    server.ehlo()
+                    if attempt["use_tls"]:
+                        server.starttls()
+                        server.ehlo()
+                    server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                    server.send_message(message)
 
-    print(
-        f"{log_label} SMTP SENT:",
-        {
-            "to": to_email,
-            "from": SMTP_FROM_EMAIL,
-            "host": SMTP_HOST,
-            "port": SMTP_PORT,
-        },
-    )
+            print(
+                f"{log_label} SMTP SENT:",
+                {
+                    "to": to_email,
+                    "from": SMTP_FROM_EMAIL,
+                    "host": attempt["host"],
+                    "port": attempt["port"],
+                    "ssl": attempt["use_ssl"],
+                    "tls": attempt["use_tls"],
+                    "mode": attempt["label"],
+                },
+            )
+            return True
+        except Exception as e:
+            attempt_errors.append(
+                {
+                    "host": attempt["host"],
+                    "port": attempt["port"],
+                    "ssl": attempt["use_ssl"],
+                    "tls": attempt["use_tls"],
+                    "mode": attempt["label"],
+                    "error": repr(e),
+                }
+            )
+            print(f"{log_label} SMTP ATTEMPT FAILED:", attempt_errors[-1])
 
-    return True
+    print(f"{log_label} SMTP ERROR: all attempts failed", attempt_errors)
+    return False
 
 
 def send_verification_email(user, code):
