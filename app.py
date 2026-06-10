@@ -133,6 +133,18 @@ def apply_cors_headers(response):
     return response
 
 
+@app.errorhandler(500)
+def handle_internal_server_error(error):
+    print("INTERNAL SERVER ERROR:", repr(error))
+    return jsonify({"error": "Internal server error"}), 500
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(error):
+    print("UNEXPECTED SERVER ERROR:", repr(error))
+    return jsonify({"error": "Internal server error"}), 500
+
+
 DB_USER = os.getenv("DB_USER", "admin")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOST = os.getenv("DB_HOST")
