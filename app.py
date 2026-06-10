@@ -292,6 +292,9 @@ SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL") or SMTP_USERNAME
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Zuri Elegance")
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
 SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
+EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "smtp").strip().lower()
+BREVO_API_KEY = os.getenv("BREVO_API_KEY")
+BREVO_API_URL = os.getenv("BREVO_API_URL", "https://api.brevo.com/v3/smtp/email")
 
 
 def parse_smtp_timeout():
@@ -304,6 +307,18 @@ def parse_smtp_timeout():
 
 
 SMTP_TIMEOUT_SECONDS = parse_smtp_timeout()
+
+
+def parse_email_http_timeout():
+    try:
+        requested_timeout = int(os.getenv("EMAIL_HTTP_TIMEOUT_SECONDS") or "10")
+    except (TypeError, ValueError):
+        requested_timeout = 10
+
+    return min(max(requested_timeout, 5), 15)
+
+
+EMAIL_HTTP_TIMEOUT_SECONDS = parse_email_http_timeout()
 
 
 def build_smtp_attempts():
@@ -379,6 +394,8 @@ print("APP ENV:", APP_ENV)
 print(
     "SMTP CONFIG:",
     {
+        "email_provider": EMAIL_PROVIDER,
+        "brevo_key_loaded": "YES" if BREVO_API_KEY else "NO",
         "host": SMTP_HOST,
         "port": SMTP_PORT,
         "username_loaded": "YES" if SMTP_USERNAME else "NO",
@@ -1143,7 +1160,75 @@ def create_email_verification_record(user):
     return code
 
 
+def send_brevo_email(to_email, subject, text_content, html_content, attachments=None, log_label="EMAIL"):
+    if not BREVO_API_KEY or not SMTP_FROM_EMAIL:
+        print(f"{log_label} BREVO SKIPPED: Brevo not configured")
+        return False
+
+    payload = {
+        "sender": {"name": SMTP_FROM_NAME, "email": SMTP_FROM_EMAIL},
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "htmlContent": html_content,
+        "textContent": text_content,
+    }
+
+    encoded_attachments = []
+    for attachment in attachments or []:
+        content = attachment["content"]
+        if isinstance(content, str):
+            content = content.encode("utf-8")
+        encoded_attachments.append(
+            {
+                "name": attachment["filename"],
+                "content": base64.b64encode(content).decode("ascii"),
+            }
+        )
+
+    if encoded_attachments:
+        payload["attachment"] = encoded_attachments
+
+    try:
+        response = requests.post(
+            BREVO_API_URL,
+            headers={
+                "accept": "application/json",
+                "api-key": BREVO_API_KEY,
+                "content-type": "application/json",
+            },
+            json=payload,
+            timeout=EMAIL_HTTP_TIMEOUT_SECONDS,
+        )
+        if response.status_code >= 400:
+            print(
+                f"{log_label} BREVO ERROR:",
+                {
+                    "status": response.status_code,
+                    "response": response.text[:500],
+                },
+            )
+            return False
+    except Exception as e:
+        print(f"{log_label} BREVO ERROR:", repr(e))
+        return False
+
+    print(
+        f"{log_label} BREVO SENT:",
+        {
+            "to": to_email,
+            "from": SMTP_FROM_EMAIL,
+            "status": response.status_code,
+        },
+    )
+    return True
+
+
 def send_smtp_email(to_email, subject, text_content, html_content, attachments=None, log_label="EMAIL"):
+    if EMAIL_PROVIDER == "brevo":
+        if send_brevo_email(to_email, subject, text_content, html_content, attachments, log_label):
+            return True
+        print(f"{log_label} BREVO FALLBACK: trying SMTP after Brevo failure")
+
     if not SMTP_HOST or not SMTP_USERNAME or not SMTP_PASSWORD or not SMTP_FROM_EMAIL:
         print(f"{log_label} SKIPPED: SMTP not configured")
         return False
