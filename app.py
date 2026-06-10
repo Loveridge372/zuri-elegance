@@ -96,11 +96,34 @@ CORS(
 )
 
 
+def is_allowed_cors_origin(origin):
+    if not origin:
+        return False
+
+    parsed = urlparse(origin)
+    host = parsed.netloc.lower()
+
+    return (
+        origin in ALLOWED_CORS_ORIGINS
+        or host.endswith(".netlify.app")
+        or host in {"localhost:5173", "127.0.0.1:5173"}
+    )
+
+
+@app.before_request
+def handle_cors_preflight():
+    if request.method != "OPTIONS":
+        return None
+
+    response = jsonify({"ok": True})
+    return response, 200
+
+
 @app.after_request
 def apply_cors_headers(response):
     origin = request.headers.get("Origin")
 
-    if origin in ALLOWED_CORS_ORIGINS:
+    if is_allowed_cors_origin(origin):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
