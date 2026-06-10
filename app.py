@@ -3489,34 +3489,43 @@ def verify_email():
  
 @app.route("/resend-verification-email", methods=["POST"])
 def resend_verification_email():
-    data = request.get_json() or {}
-    email = (data.get("email") or "").strip().lower()
+    try:
+        data = request.get_json() or {}
+        email = (data.get("email") or "").strip().lower()
 
-    if not email:
-        return jsonify({"error": "Email is required"}), 400
+        if not email:
+            return jsonify({"error": "Email is required"}), 400
 
-    user = User.query.filter_by(email=email).first()
-    if not user:
-        return jsonify({"error": "User not found"}), 404
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
 
-    if user.is_verified:
-        return jsonify({"message": "Email is already verified"}), 200
+        if user.is_verified:
+            return jsonify({"message": "Email is already verified"}), 200
 
-    code = create_email_verification_record(user)
+        code = create_email_verification_record(user)
 
-    if not send_verification_email(user, code):
+        if not send_verification_email(user, code):
+            db.session.rollback()
+            return jsonify({
+                "message": "Could not resend right now. Please use the verification code already sent to your email, or try again shortly.",
+                "email_sent": False,
+            }), 200
+
+        db.session.commit()
+
+        return jsonify({
+            "message": "Verification email sent again",
+            "email_sent": True,
+        }), 200
+
+    except Exception as e:
         db.session.rollback()
+        print("RESEND VERIFICATION ERROR:", repr(e))
         return jsonify({
             "message": "Could not resend right now. Please use the verification code already sent to your email, or try again shortly.",
             "email_sent": False,
         }), 200
-
-    db.session.commit()
-
-    return jsonify({
-        "message": "Verification email sent again",
-        "email_sent": True,
-    }), 200
 
 
 def create_password_reset_token(user):
