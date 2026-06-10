@@ -50,6 +50,11 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 403 && (data.error || "").toLowerCase().includes("verify")) {
+          navigate("/verify-email", { state: { email: email.trim() } });
+          return;
+        }
+
         alert(data.error || "Login failed");
         return;
       }
