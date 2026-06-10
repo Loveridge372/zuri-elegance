@@ -268,9 +268,6 @@ PAYSTACK_CALLBACK_URL = normalize_public_url(
     f"{FRONTEND_URL}/payment-success",
 )
 
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL")
-
 SMTP_HOST = os.getenv("SMTP_HOST")
 SMTP_PORT = int(os.getenv("SMTP_PORT") or "587")
 SMTP_USERNAME = os.getenv("SMTP_USERNAME")
@@ -1076,7 +1073,7 @@ def create_email_verification_record(user):
 def send_smtp_email(to_email, subject, text_content, html_content, attachments=None, log_label="EMAIL"):
     if not SMTP_HOST or not SMTP_USERNAME or not SMTP_PASSWORD or not SMTP_FROM_EMAIL:
         print(f"{log_label} SKIPPED: SMTP not configured")
-        return send_sendgrid_email(to_email, subject, text_content, html_content, attachments, log_label)
+        return False
 
     message = EmailMessage()
     message["Subject"] = subject
@@ -1106,7 +1103,7 @@ def send_smtp_email(to_email, subject, text_content, html_content, attachments=N
                 server.send_message(message)
     except Exception as e:
         print(f"{log_label} SMTP ERROR:", repr(e))
-        return send_sendgrid_email(to_email, subject, text_content, html_content, attachments, log_label)
+        return False
 
     print(
         f"{log_label} SMTP SENT:",
@@ -1118,74 +1115,6 @@ def send_smtp_email(to_email, subject, text_content, html_content, attachments=N
         },
     )
 
-    return True
-
-
-def send_sendgrid_email(to_email, subject, text_content, html_content, attachments=None, log_label="EMAIL"):
-    if not SENDGRID_API_KEY or not SENDGRID_FROM_EMAIL:
-        print(f"{log_label} SENDGRID SKIPPED: SendGrid not configured")
-        return False
-
-    payload = {
-        "personalizations": [
-            {
-                "to": [{"email": to_email}],
-                "subject": subject,
-            }
-        ],
-        "from": {
-            "email": SENDGRID_FROM_EMAIL,
-            "name": SMTP_FROM_NAME or "Zuri Elegance",
-        },
-        "content": [
-            {
-                "type": "text/plain",
-                "value": text_content,
-            },
-            {
-                "type": "text/html",
-                "value": html_content,
-            },
-        ],
-    }
-
-    if attachments:
-        payload["attachments"] = [
-            {
-                "content": base64.b64encode(attachment["content"]).decode("utf-8"),
-                "type": f"{attachment.get('maintype', 'application')}/{attachment.get('subtype', 'octet-stream')}",
-                "filename": attachment["filename"],
-                "disposition": "attachment",
-            }
-            for attachment in attachments
-        ]
-
-    try:
-        response = requests.post(
-            "https://api.sendgrid.com/v3/mail/send",
-            headers={
-                "Authorization": f"Bearer {SENDGRID_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=SMTP_TIMEOUT_SECONDS,
-        )
-    except Exception as e:
-        print(f"{log_label} SENDGRID ERROR:", repr(e))
-        return False
-
-    if response.status_code not in [200, 202]:
-        print(f"{log_label} SENDGRID ERROR:", response.status_code, response.text)
-        return False
-
-    print(
-        f"{log_label} SENDGRID SENT:",
-        {
-            "to": to_email,
-            "from": SENDGRID_FROM_EMAIL,
-            "status": response.status_code,
-        },
-    )
     return True
 
 
@@ -4417,122 +4346,6 @@ def generate_invoice_pdf_bytes(order):
     pdf_bytes = buffer.getvalue()
     buffer.close()
     return pdf_bytes
-
-
-def send_order_email(to_email, customer_name, order):
-    try:
-        if not SENDGRID_API_KEY or not SENDGRID_FROM_EMAIL:
-            print("EMAIL SKIPPED: SendGrid not configured")
-            return None
-
-        status = (order.delivery_status or "Processing").lower()
-
-        if status == "packed":
-            subject = f"Your Zuri Elegance order #{order.id} has been packed"
-            heading = "Your Order Has Been Packed 📦"
-            intro = "Your order has been packed and is being prepared for delivery."
-        elif status == "out for delivery":
-            subject = f"Your Zuri Elegance order #{order.id} is out for delivery"
-            heading = "Your Order Is Out For Delivery 🚚"
-            intro = "Good news — your order is on its way. Please keep your phone nearby."
-        elif status == "delivered":
-            subject = f"Your Zuri Elegance order #{order.id} has been delivered"
-            heading = "Your Order Has Been Delivered ✅"
-            intro = "Your order has been delivered. We hope you love your Zuri Elegance purchase."
-        elif status in ["delayed", "delay"]:
-            subject = f"Update on your Zuri Elegance order #{order.id}"
-            heading = "Delivery Update ⏳"
-            intro = "Your order is taking a little longer than expected, but we are working to get it to you as soon as possible."
-        else:
-            subject = f"Zuri Elegance Order Confirmation #{order.id}"
-            heading = "Order Confirmed 💜"
-            intro = "Your payment was successful and your order is now being processed."
-
-        items_html = "".join([
-            f"<li>{item.name} x{item.quantity} - R {float(item.price or 0):.2f}</li>"
-            for item in order.items
-        ])
-
-        html = f"""
-        <div style="font-family: Arial, sans-serif; color:#2b2023; padding:20px;">
-          <h1 style="color:#50242A;">Zuri Elegance</h1>
-          <h2>{heading}</h2>
-
-          <p>Hi {customer_name},</p>
-          <p>{intro}</p>
-
-          <p><strong>Order ID:</strong> #{order.id}</p>
-          <p><strong>Reference:</strong> {order.reference}</p>
-          <p><strong>Tracking:</strong> {order.tracking_number or "Pending"}</p>
-          <p><strong>Status:</strong> {order.delivery_status or "Processing"}</p>
-          <p><strong>Total:</strong> R {float(order.total or 0):.2f}</p>
-
-          <h3>Items</h3>
-          <ul>{items_html}</ul>
-
-          <p>
-            <a href="{build_tracking_link(order)}"
-               style="background:#50242A;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;">
-              Track Your Order
-            </a>
-          </p>
-
-          <p style="color:#A38560;font-weight:bold;">Thank you for shopping with Zuri Elegance.</p>
-        </div>
-        """
-
-
-        invoice_pdf = generate_invoice_pdf_bytes(order)
-        invoice_base64 = base64.b64encode(invoice_pdf).decode("utf-8")
-
-
-        payload = {
-            "personalizations": [
-                {
-                    "to": [{"email": to_email}],
-                    "subject": subject,
-                }
-            ],
-            "from": {
-                "email": SENDGRID_FROM_EMAIL,
-                "name": "Zuri Elegance",
-            },
-            "content": [
-                {
-                    "type": "text/html",
-                    "value": html,
-                }
-            ],
-            "attachments": [
-    {
-        "content": invoice_base64,
-        "type": "application/pdf",
-        "filename": f"zuri-elegance-invoice-{order.id}.pdf",
-        "disposition": "attachment",
-    }
-],
-        }
-
-        response = requests.post(
-            "https://api.sendgrid.com/v3/mail/send",
-            headers={
-                "Authorization": f"Bearer {SENDGRID_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=30,
-        )
-
-        if response.status_code not in [200, 202]:
-            print("SENDGRID ERROR:", response.text)
-            return None
-
-        print("EMAIL SENT ✅")
-        return True
-
-    except Exception as e:
-        print("EMAIL ERROR:", e)
-        return None
 
 
 def send_order_email(to_email, customer_name, order):
