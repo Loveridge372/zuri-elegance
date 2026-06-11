@@ -28,7 +28,7 @@ export default function VerifyEmailPage() {
         },
         body: JSON.stringify({
           email: email.trim(),
-          code: code.trim(),
+          code: code.replace(/\D/g, ""),
         }),
       });
 
@@ -107,7 +107,9 @@ export default function VerifyEmailPage() {
             style={styles.input}
             placeholder="Verification code"
             value={code}
-            onChange={(e) => setCode(e.target.value)}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            maxLength={6}
             required
           />
 

@@ -1137,24 +1137,26 @@ def create_email_verification_code():
 
 def hash_email_verification_code(email, code):
     normalized_email = (email or "").strip().lower()
-    normalized_code = (code or "").strip()
+    normalized_code = re.sub(r"\D", "", (code or ""))
     return hashlib.sha256(
         f"{SECRET_KEY}:{normalized_email}:{normalized_code}".encode("utf-8")
     ).hexdigest()
 
 
 def create_email_verification_record(user):
-    EmailVerificationCode.query.filter_by(
-        user_id=user.id,
-        consumed_at=None,
-    ).update({"consumed_at": datetime.utcnow()})
+    now = datetime.utcnow()
+    EmailVerificationCode.query.filter(
+        EmailVerificationCode.user_id == user.id,
+        EmailVerificationCode.consumed_at.is_(None),
+        EmailVerificationCode.expires_at < now,
+    ).update({"consumed_at": now}, synchronize_session=False)
 
     code = create_email_verification_code()
     record = EmailVerificationCode(
         user_id=user.id,
         email=user.email,
         code_hash=hash_email_verification_code(user.email, code),
-        expires_at=datetime.utcnow() + timedelta(minutes=15),
+        expires_at=now + timedelta(minutes=30),
     )
     db.session.add(record)
     return code
@@ -3631,10 +3633,13 @@ def verify_email():
     data = request.get_json() or {}
 
     email = (data.get("email") or "").strip().lower()
-    code = (data.get("code") or "").strip()
+    code = re.sub(r"\D", "", (data.get("code") or ""))
 
     if not email or not code:
         return jsonify({"error": "Email and code are required"}), 400
+
+    if len(code) != 6:
+        return jsonify({"error": "Please enter the 6-digit verification code."}), 400
 
     user = User.query.filter_by(email=email).first()
     if not user:
@@ -3643,27 +3648,40 @@ def verify_email():
     if user.is_verified:
         return jsonify({"message": "Email verified successfully"}), 200
 
-    verification = (
+    now = datetime.utcnow()
+    active_codes = (
         EmailVerificationCode.query
-        .filter_by(user_id=user.id, consumed_at=None)
+        .filter(
+            EmailVerificationCode.user_id == user.id,
+            EmailVerificationCode.consumed_at.is_(None),
+            EmailVerificationCode.expires_at >= now,
+        )
         .order_by(EmailVerificationCode.created_at.desc())
-        .first()
+        .all()
     )
 
-    if not verification or verification.expires_at < datetime.utcnow():
+    if not active_codes:
         return jsonify({"error": "Verification code expired. Please request a new code."}), 400
 
-    if verification.attempts >= 5:
+    total_attempts = sum((verification.attempts or 0) for verification in active_codes)
+    if total_attempts >= 10:
         return jsonify({"error": "Too many verification attempts. Please request a new code."}), 429
 
-    verification.attempts += 1
+    expected_hash = hash_email_verification_code(user.email, code)
+    matched_code = next(
+        (verification for verification in active_codes if verification.code_hash == expected_hash),
+        None,
+    )
 
-    if verification.code_hash != hash_email_verification_code(email, code):
+    if not matched_code:
+        for verification in active_codes:
+            verification.attempts = (verification.attempts or 0) + 1
         db.session.commit()
         return jsonify({"error": "Invalid or expired verification code"}), 400
 
     user.is_verified = True
-    verification.consumed_at = datetime.utcnow()
+    for verification in active_codes:
+        verification.consumed_at = now
     db.session.commit()
 
     return jsonify({
