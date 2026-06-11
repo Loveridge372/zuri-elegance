@@ -1227,9 +1227,7 @@ def send_brevo_email(to_email, subject, text_content, html_content, attachments=
 
 def send_smtp_email(to_email, subject, text_content, html_content, attachments=None, log_label="EMAIL"):
     if EMAIL_PROVIDER == "brevo":
-        if send_brevo_email(to_email, subject, text_content, html_content, attachments, log_label):
-            return True
-        print(f"{log_label} BREVO FALLBACK: trying SMTP after Brevo failure")
+        return send_brevo_email(to_email, subject, text_content, html_content, attachments, log_label)
 
     if not SMTP_HOST or not SMTP_USERNAME or not SMTP_PASSWORD or not SMTP_FROM_EMAIL:
         print(f"{log_label} SKIPPED: SMTP not configured")
@@ -4635,26 +4633,45 @@ Thank you for shopping with Zuri Elegance.
         </div>
         """
 
-        invoice_pdf = generate_invoice_pdf_bytes(order)
-        return send_smtp_email(
-            to_email,
-            subject,
-            text_content,
-            html_content,
-            attachments=[
+        attachments = []
+        try:
+            invoice_pdf = generate_invoice_pdf_bytes(order)
+            attachments.append(
                 {
                     "content": invoice_pdf,
                     "maintype": "application",
                     "subtype": "pdf",
                     "filename": f"zuri-elegance-invoice-{order.id}.pdf",
                 }
-            ],
+            )
+        except Exception as invoice_error:
+            print("ORDER EMAIL INVOICE ATTACHMENT ERROR:", repr(invoice_error))
+
+        email_sent = send_smtp_email(
+            to_email,
+            subject,
+            text_content,
+            html_content,
+            attachments=attachments,
             log_label="ORDER EMAIL",
         )
 
+        if not email_sent and attachments:
+            print("ORDER EMAIL RETRY: sending without invoice attachment")
+            email_sent = send_smtp_email(
+                to_email,
+                subject,
+                text_content,
+                html_content,
+                attachments=[],
+                log_label="ORDER EMAIL",
+            )
+
+        return email_sent
+
     except Exception as e:
-        print("ORDER EMAIL ERROR:", e)
-        return None
+        print("ORDER EMAIL ERROR:", repr(e))
+        return False
 
 
 def notify_order_confirmed(order):
@@ -4667,7 +4684,17 @@ def notify_order_confirmed(order):
     customer_name = user.full_name or "Customer"
 
     if user.email:
-        send_order_email(user.email, customer_name, order)
+        email_sent = send_order_email(user.email, customer_name, order)
+        print(
+            "ORDER CONFIRMATION EMAIL RESULT:",
+            {
+                "order_id": order.id,
+                "to": user.email,
+                "sent": bool(email_sent),
+            },
+        )
+    else:
+        print("ORDER CONFIRMATION EMAIL SKIPPED: No customer email")
 
     print("USER PHONE FOR WHATSAPP:", user.phone)
 
